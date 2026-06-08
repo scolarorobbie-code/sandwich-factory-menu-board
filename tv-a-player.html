@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, user-scalable=no">
+<title>Sandwich Factory — TV A: Daily Specials</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+    background: #0a0a0c;
+  }
+  .stage {
+    position: relative;
+    width: 1920px;
+    height: 1080px;
+    overflow: hidden;
+  }
+  video {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    min-width: 100%;
+    min-height: 100%;
+    width: auto;
+    height: auto;
+    transform: translate(-50%, -50%);
+    object-fit: cover;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <video id="board" autoplay muted loop playsinline preload="auto">
+      <source src="videos/tv-a-daily-specials.mp4" type="video/mp4">
+    </video>
+  </div>
+  <script>
+    // Roku/embedded browsers sometimes need a nudge to start autoplay+loop reliably
+    const v = document.getElementById('board');
+    const ensurePlaying = () => { if (v.paused) v.play().catch(() => {}); };
+    v.addEventListener('loadeddata', ensurePlaying);
+    v.addEventListener('ended', () => { v.currentTime = 0; v.play().catch(() => {}); });
+    document.addEventListener('visibilitychange', ensurePlaying);
+    setInterval(ensurePlaying, 5000);
+  </script>
+</body>
+</html>
