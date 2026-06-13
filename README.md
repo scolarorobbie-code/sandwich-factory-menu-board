@@ -37,10 +37,15 @@ to the live Square account yet — that's a later, guided step (see
 
 ## Status
 
-- ✅ **Phase 0 foundations** — contract, Expo app skeleton, Worker backend,
-  mock menu pipe (app → backend → menu), webhook signature verification.
-- ⏭️ **Phase 1 (next)** — sign-in, cart, pay (Square sandbox), order → POS,
-  staff + customer push notifications. Needs Square sandbox credentials.
+- ✅ **Phase 0 foundations** — contract, Expo app, Worker backend, menu pipe,
+  webhook signature verification.
+- ✅ **Phase 1 core loop (on mock data)** — customize → cart → sign in → pay →
+  order created → staff alert + customer status. Backend loop verified
+  end-to-end (22/22 checks). App screens built (menu, item customization, cart,
+  auth, checkout, live order status, deals, account + Stars + history).
+- ⏭️ **Next** — connect Square sandbox (real menu, real test card, real
+  webhooks), then build an EAS dev build to test the native In-App Payments SDK
+  and push notifications on a device. See `services/backend/README.md`.
 
 ## Hard rules (full list in `CLAUDE.md`)
 
