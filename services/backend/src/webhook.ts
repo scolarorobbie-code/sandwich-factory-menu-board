@@ -1,5 +1,6 @@
 import type { Env } from "./env";
 import { error, json } from "./responses";
+import { store } from "./store";
 
 /**
  * Square webhook receiver. Hard rules #3 (verify signature) and #4 (idempotency).
@@ -68,11 +69,14 @@ function timingSafeEqual(a: string, b: string): boolean {
 const TTL_SECONDS = 60 * 60 * 24 * 7; // a week is plenty for de-dupe
 
 async function alreadyProcessed(env: Env, eventId: string): Promise<boolean> {
-  if (!env.IDEMPOTENCY) return false; // dev without KV: best-effort only
+  if (!env.IDEMPOTENCY) return store.seenEvent(eventId); // dev fallback
   return (await env.IDEMPOTENCY.get(`evt:${eventId}`)) !== null;
 }
 
 async function markProcessed(env: Env, eventId: string): Promise<void> {
-  if (!env.IDEMPOTENCY) return;
+  if (!env.IDEMPOTENCY) {
+    store.markEvent(eventId);
+    return;
+  }
   await env.IDEMPOTENCY.put(`evt:${eventId}`, "1", { expirationTtl: TTL_SECONDS });
 }
