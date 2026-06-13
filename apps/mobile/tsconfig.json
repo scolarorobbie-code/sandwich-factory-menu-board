@@ -1,0 +1,10 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@sf/contract": ["../../contract/types.ts"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx", "../../contract/types.ts"]
+}

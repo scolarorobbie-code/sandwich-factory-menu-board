@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# secrets — NEVER commit (see CLAUDE.md hard rule #1)
+.dev.vars
+.env
+.env.*
+!.env.example
+!.dev.vars.example
+
+# expo
+.expo/
+dist/
+web-build/
+*.tsbuildinfo
+
+# cloudflare
+.wrangler/
+
+# os / editor
+.DS_Store
+*.log
