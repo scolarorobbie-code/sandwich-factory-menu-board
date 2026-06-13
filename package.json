@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "backend:dev": "npm --workspace services/backend run dev",
-    "mobile:start": "npm --workspace apps/mobile run start"
+    "mobile:start": "npm --workspace apps/mobile run start",
+    "connect-square": "npm --workspace services/backend run connect-square"
   }
 }
