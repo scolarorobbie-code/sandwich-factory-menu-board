@@ -10,20 +10,20 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@react-navigation/bottom-tabs": "^6.6.1",
-    "@react-navigation/native": "^6.1.18",
-    "@react-navigation/native-stack": "^6.11.0",
+    "@react-navigation/bottom-tabs": "^7.2.0",
+    "@react-navigation/native": "^7.3.1",
+    "@react-navigation/native-stack": "^7.2.0",
     "@sf/contract": "*",
-    "expo": "~51.0.0",
-    "expo-secure-store": "~13.0.2",
-    "expo-status-bar": "~1.12.1",
-    "react": "18.2.0",
-    "react-native": "0.74.5",
-    "react-native-safe-area-context": "4.10.5",
-    "react-native-screens": "3.31.1"
+    "expo": "56.0.11",
+    "expo-secure-store": "56.0.4",
+    "expo-status-bar": "56.0.4",
+    "react": "19.2.7",
+    "react-native": "0.86.0",
+    "react-native-safe-area-context": "5.8.0",
+    "react-native-screens": "4.25.2"
   },
   "devDependencies": {
-    "@types/react": "~18.2.79",
-    "typescript": "~5.5.0"
+    "@types/react": "^19.0.0",
+    "typescript": "~5.9.0"
   }
 }
