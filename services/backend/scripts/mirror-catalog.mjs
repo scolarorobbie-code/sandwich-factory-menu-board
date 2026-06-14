@@ -172,17 +172,38 @@ if (existing.length) {
   }
 }
 
-// 4) Write your real menu into the sandbox (batches of <=1000 objects).
+// 4) Write your real menu into the sandbox. Square counts NESTED objects
+//    (each variation, each modifier) toward the 1000-per-batch limit, and
+//    cross-references must resolve within ONE request — so we pack everything
+//    into one request split into multiple batches, each <= ~900 total objects.
 console.log(`📤 Copying ${items.length} items into the sandbox…`);
-for (let i = 0; i < upserts.length; i += 1000) {
-  await sq(SANDBOX, sandboxToken, "/v2/catalog/batch-upsert", {
-    method: "POST",
-    body: JSON.stringify({
-      idempotency_key: `mirror-${Date.now()}-${i}`,
-      batches: [{ objects: upserts.slice(i, i + 1000) }],
-    }),
-  });
+
+const weight = (o) =>
+  o.type === "ITEM"
+    ? 1 + (o.item_data?.variations?.length ?? 0)
+    : o.type === "MODIFIER_LIST"
+      ? 1 + (o.modifier_list_data?.modifiers?.length ?? 0)
+      : 1;
+
+const batches = [];
+let current = [];
+let currentWeight = 0;
+for (const obj of upserts) {
+  const w = weight(obj);
+  if (current.length && currentWeight + w > 900) {
+    batches.push({ objects: current });
+    current = [];
+    currentWeight = 0;
+  }
+  current.push(obj);
+  currentWeight += w;
 }
+if (current.length) batches.push({ objects: current });
+
+await sq(SANDBOX, sandboxToken, "/v2/catalog/batch-upsert", {
+  method: "POST",
+  body: JSON.stringify({ idempotency_key: `mirror-${Date.now()}`, batches }),
+});
 
 console.log(`
 🎉 Done! Your real menu is now in the sandbox.
