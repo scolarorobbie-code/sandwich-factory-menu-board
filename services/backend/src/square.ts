@@ -81,6 +81,35 @@ export async function fetchLiveMenu(env: Env): Promise<Menu> {
   };
 }
 
+/**
+ * Food-relevant placeholder image for items that don't have a Square photo yet.
+ * Picks a keyword from the item name so the stand-in is on-theme, with a stable
+ * per-item variation. Real Square photos always take precedence.
+ */
+function placeholderImage(name: string, seed: string): string {
+  const n = name.toLowerCase();
+  const kw = /burger/.test(n)
+    ? "burger"
+    : /shake|smoothie|malt/.test(n)
+      ? "milkshake"
+      : /cookie|brownie|dessert|cake/.test(n)
+        ? "cookie"
+        : /drink|soda|lemonade|tea|coffee|cola|juice/.test(n)
+          ? "soda"
+          : /fries|tots|chip/.test(n)
+            ? "fries"
+            : /salad/.test(n)
+              ? "salad"
+              : /wrap/.test(n)
+                ? "wrap"
+                : /cuban/.test(n)
+                  ? "cuban,sandwich"
+                  : "sandwich";
+  let h = 7;
+  for (const c of seed) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return `https://loremflickr.com/600/400/${kw},food?lock=${Math.abs(h) % 1000}`;
+}
+
 function mapItem(
   o: SquareObject,
   imageUrls: Map<string, string>,
@@ -88,11 +117,12 @@ function mapItem(
 ): MenuItem {
   const d = o.item_data!;
   const imageId = d.image_ids?.[0];
+  const squareImage = imageId ? imageUrls.get(imageId) : undefined;
   return {
     id: o.id,
     name: d.name ?? "Item",
     description: d.description,
-    imageUrl: imageId ? imageUrls.get(imageId) : undefined,
+    imageUrl: squareImage ?? placeholderImage(d.name ?? "food", o.id),
     available: !o.is_deleted,
     variations: (d.variations ?? []).map((v) => ({
       id: v.id,

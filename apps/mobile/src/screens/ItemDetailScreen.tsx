@@ -14,19 +14,30 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
   const cart = useCart();
 
   const [variationId, setVariationId] = useState(item.variations[0]?.id);
-  // Pre-select any default modifiers.
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(item.modifierGroups.flatMap((g) => g.modifiers.filter((m) => m.selectedByDefault).map((m) => m.id))),
   );
+  // Required groups start open; optional groups start collapsed.
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => new Set(item.modifierGroups.filter((g) => g.minSelections > 0).map((g) => g.id)),
+  );
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
+
+  function toggleExpand(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   function toggle(group: ModifierGroup, mod: Modifier) {
     setSelected((prev) => {
       const next = new Set(prev);
       const groupIds = group.modifiers.map((m) => m.id);
       if (group.maxSelections <= 1) {
-        groupIds.forEach((id) => next.delete(id)); // single-select: clear group first
+        groupIds.forEach((id) => next.delete(id));
         next.add(mod.id);
       } else if (next.has(mod.id)) {
         next.delete(mod.id);
@@ -42,10 +53,15 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
   const chosenMods = item.modifierGroups.flatMap((g) => g.modifiers.filter((m) => selected.has(m.id)));
   const unit = variation.price.amount + chosenMods.reduce((s, m) => s + m.price.amount, 0);
 
-  // Validate required (min) selections per group.
-  const missing = item.modifierGroups.filter(
-    (g) => g.minSelections > 0 && g.modifiers.filter((m) => selected.has(m.id)).length < g.minSelections,
-  );
+  const isMissing = (g: ModifierGroup) =>
+    g.minSelections > 0 && g.modifiers.filter((m) => selected.has(m.id)).length < g.minSelections;
+  const missing = item.modifierGroups.filter(isMissing);
+
+  function summary(g: ModifierGroup): string {
+    const names = g.modifiers.filter((m) => selected.has(m.id)).map((m) => m.name);
+    if (names.length) return names.join(", ");
+    return g.minSelections > 0 ? "Required" : "Optional";
+  }
 
   function addToCart() {
     cart.add(item, variation, chosenMods, quantity, note.trim() || undefined);
@@ -59,37 +75,58 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
         {item.description ? <Text style={styles.desc}>{item.description}</Text> : null}
 
         {item.variations.length > 1 && (
-          <Group title="Size">
-            {item.variations.map((v) => (
-              <Row
-                key={v.id}
-                label={v.name}
-                price={v.price.amount ? `+${dollars(v.price.amount)}` : dollars(v.price.amount)}
-                selected={v.id === variationId}
-                kind="radio"
-                onPress={() => setVariationId(v.id)}
-              />
-            ))}
-          </Group>
+          <View style={styles.block}>
+            <Text style={styles.blockTitle}>Size</Text>
+            <View style={{ gap: 8 }}>
+              {item.variations.map((v) => (
+                <Row
+                  key={v.id}
+                  label={v.name}
+                  price={v.price.amount ? `+${dollars(v.price.amount)}` : dollars(v.price.amount)}
+                  selected={v.id === variationId}
+                  kind="radio"
+                  onPress={() => setVariationId(v.id)}
+                />
+              ))}
+            </View>
+          </View>
         )}
 
-        {item.modifierGroups.map((g) => (
-          <Group key={g.id} title={g.name} subtitle={g.minSelections > 0 ? "Required" : "Optional"}>
-            {g.modifiers.map((m) => (
-              <Row
-                key={m.id}
-                label={m.name}
-                price={m.price.amount ? `+${dollars(m.price.amount)}` : ""}
-                selected={selected.has(m.id)}
-                kind={g.maxSelections <= 1 ? "radio" : "check"}
-                disabled={!m.available}
-                onPress={() => toggle(g, m)}
-              />
-            ))}
-          </Group>
-        ))}
+        {item.modifierGroups.map((g) => {
+          const open = expanded.has(g.id);
+          const miss = isMissing(g);
+          return (
+            <View key={g.id} style={[styles.group, miss && styles.groupMissing]}>
+              <Pressable style={styles.groupHeader} onPress={() => toggleExpand(g.id)}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupName}>{g.name}</Text>
+                  <Text style={[styles.groupSummary, miss && { color: colors.accent }]} numberOfLines={1}>
+                    {summary(g)}
+                  </Text>
+                </View>
+                <Text style={styles.chevron}>{open ? "▾" : "▸"}</Text>
+              </Pressable>
+              {open && (
+                <View style={{ marginTop: 10, gap: 8 }}>
+                  {g.modifiers.map((m) => (
+                    <Row
+                      key={m.id}
+                      label={m.name}
+                      price={m.price.amount ? `+${dollars(m.price.amount)}` : ""}
+                      selected={selected.has(m.id)}
+                      kind={g.maxSelections <= 1 ? "radio" : "check"}
+                      disabled={!m.available}
+                      onPress={() => toggle(g, m)}
+                    />
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
 
-        <Group title="Special instructions">
+        <View style={styles.block}>
+          <Text style={styles.blockTitle}>Special instructions</Text>
           <TextInput
             style={styles.input}
             placeholder="e.g. no onions"
@@ -97,7 +134,7 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
             value={note}
             onChangeText={setNote}
           />
-        </Group>
+        </View>
 
         <View style={styles.qtyRow}>
           <Text style={styles.qtyLabel}>Quantity</Text>
@@ -116,18 +153,6 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
           disabled={missing.length > 0}
         />
       </View>
-    </View>
-  );
-}
-
-function Group({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
-  return (
-    <View style={{ marginTop: 18 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <Text style={styles.groupTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.groupSub}>{subtitle}</Text> : null}
-      </View>
-      <View style={{ marginTop: 8, gap: 8 }}>{children}</View>
     </View>
   );
 }
@@ -170,12 +195,28 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   hero: { width: "100%", height: 200, borderRadius: 16, marginBottom: 14, backgroundColor: "#2a2421" },
   desc: { color: colors.muted, fontSize: 16, lineHeight: 22 },
-  groupTitle: { color: colors.text, fontSize: 18, fontWeight: "800" },
-  groupSub: { color: colors.muted, fontSize: 13 },
+
+  block: { marginTop: 20 },
+  blockTitle: { color: colors.text, fontSize: 18, fontWeight: "800", marginBottom: 10 },
+
+  group: {
+    marginTop: 12,
+    backgroundColor: colors.card,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 14,
+  },
+  groupMissing: { borderColor: colors.accent },
+  groupHeader: { flexDirection: "row", alignItems: "center" },
+  groupName: { color: colors.text, fontSize: 17, fontWeight: "800" },
+  groupSummary: { color: colors.muted, fontSize: 13, marginTop: 3 },
+  chevron: { color: colors.accent2, fontSize: 18, fontWeight: "800", marginLeft: 10 },
+
   row: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: colors.card,
+    backgroundColor: colors.bg,
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
@@ -195,6 +236,7 @@ const styles = StyleSheet.create({
   markerTick: { color: "#1a1410", fontSize: 13, fontWeight: "900" },
   rowLabel: { color: colors.text, fontSize: 16, flex: 1 },
   rowPrice: { color: colors.accent2, fontSize: 15, fontWeight: "700" },
+
   input: { backgroundColor: colors.card, borderRadius: 12, padding: 14, color: colors.text, borderWidth: 1, borderColor: colors.line },
   qtyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 24 },
   qtyLabel: { color: colors.text, fontSize: 18, fontWeight: "800" },
