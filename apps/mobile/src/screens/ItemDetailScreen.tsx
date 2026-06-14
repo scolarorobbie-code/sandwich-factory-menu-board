@@ -1,6 +1,6 @@
 import type { Modifier, ModifierGroup } from "@sf/contract";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Button } from "../components/Button";
 import { useCart } from "../state/cart";
@@ -8,6 +8,13 @@ import { colors, dollars } from "../theme";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ItemDetail">;
+
+// --- Conditional modifiers (bridge until the merchant control panel) ---
+// A "Choose your drink" group only appears once a combo option is selected.
+// The owner adds the drink group in Square; this reveals it at the right moment.
+const isConditionalGroup = (g: ModifierGroup) => /drink/i.test(g.name);
+const isComboTrigger = (name: string) =>
+  /drink/i.test(name) || (/combo/i.test(name) && !/no\s+combo/i.test(name));
 
 export default function ItemDetailScreen({ route, navigation }: Props) {
   const { item } = route.params;
@@ -50,12 +57,31 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
   }
 
   const variation = item.variations.find((v) => v.id === variationId)!;
-  const chosenMods = item.modifierGroups.flatMap((g) => g.modifiers.filter((m) => selected.has(m.id)));
+
+  // Reveal a "Choose your drink" group only after a combo option is picked.
+  const comboPicked = item.modifierGroups
+    .filter((g) => !isConditionalGroup(g))
+    .flatMap((g) => g.modifiers)
+    .some((m) => selected.has(m.id) && isComboTrigger(m.name));
+  const visibleGroups = item.modifierGroups.filter((g) => !isConditionalGroup(g) || comboPicked);
+
+  // Auto-open the drink picker the moment a combo is chosen.
+  useEffect(() => {
+    if (!comboPicked) return;
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      item.modifierGroups.filter(isConditionalGroup).forEach((g) => next.add(g.id));
+      return next;
+    });
+  }, [comboPicked]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Hidden conditional groups don't count toward price, validation, or the cart.
+  const chosenMods = visibleGroups.flatMap((g) => g.modifiers.filter((m) => selected.has(m.id)));
   const unit = variation.price.amount + chosenMods.reduce((s, m) => s + m.price.amount, 0);
 
   const isMissing = (g: ModifierGroup) =>
     g.minSelections > 0 && g.modifiers.filter((m) => selected.has(m.id)).length < g.minSelections;
-  const missing = item.modifierGroups.filter(isMissing);
+  const missing = visibleGroups.filter(isMissing);
 
   function summary(g: ModifierGroup): string {
     const names = g.modifiers.filter((m) => selected.has(m.id)).map((m) => m.name);
@@ -92,7 +118,7 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
           </View>
         )}
 
-        {item.modifierGroups.map((g) => {
+        {visibleGroups.map((g) => {
           const open = expanded.has(g.id);
           const miss = isMissing(g);
           return (
