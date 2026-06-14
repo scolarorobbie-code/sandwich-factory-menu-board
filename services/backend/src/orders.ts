@@ -9,8 +9,10 @@ import type {
   OrderLineItem,
 } from "@sf/contract";
 import type { Env } from "./env";
+import { isLive } from "./env";
 import { getDeals, getMenu } from "./menu";
 import { error, json } from "./responses";
+import { createSquareOrder, type SquareLineItem } from "./square";
 import { nextDisplayNumber, store, type StoredUser } from "./store";
 
 // Murfreesboro, TN combined sales tax. Mock-mode only — in production Square's
@@ -91,25 +93,50 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
   }
   discount = Math.min(discount, subtotal);
 
-  const taxable = subtotal - discount;
-  const tax = Math.round(taxable * TAX_RATE);
-  const total = taxable + tax;
+  // Totals + Square order id. Live mode lets Square compute tax authoritatively
+  // and creates the real PICKUP order in the POS; mock computes locally.
+  let squareOrderId = "";
+  let subtotalM = usd(subtotal);
+  let taxM = usd(Math.round((subtotal - discount) * TAX_RATE));
+  let discountM = usd(discount);
+  let totalM = usd(subtotal - discount + taxM.amount);
 
-  // Production: POST /v2/orders to Square here (with Idempotency-Key) and use
-  // the returned order id + Square-computed totals. Mock builds it locally.
+  if (isLive(env)) {
+    try {
+      const sqLines: SquareLineItem[] = body.lineItems.map((l) => ({
+        catalogObjectId: l.variationId,
+        quantity: Math.max(1, Math.floor(l.quantity)),
+        modifierIds: l.modifierIds,
+        note: l.note,
+      }));
+      const idempotencyKey = req.headers.get("Idempotency-Key") ?? crypto.randomUUID();
+      const name = [user.customer.firstName, user.customer.lastName].filter(Boolean).join(" ");
+      // NOTE: app-level Stars/deal discounts are applied as ad-hoc Square
+      // discounts in a later pass; for now Square's catalog totals are source.
+      const sq = await createSquareOrder(env, sqLines, idempotencyKey, name, body.pickupNote);
+      squareOrderId = sq.squareOrderId;
+      subtotalM = sq.subtotal;
+      taxM = sq.tax;
+      discountM = sq.discount;
+      totalM = sq.total;
+    } catch (e) {
+      return error("SQUARE_ERROR", e instanceof Error ? e.message : "Could not create Square order", 502);
+    }
+  }
+
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
   const order: Order = {
     id,
-    squareOrderId: `mock-order-${id.slice(0, 8)}`,
+    squareOrderId: squareOrderId || `mock-order-${id.slice(0, 8)}`,
     displayNumber: nextDisplayNumber(),
     status: "DRAFT",
     lineItems,
-    subtotal: usd(subtotal),
-    tax: usd(tax),
-    discount: usd(discount),
-    total: usd(total),
-    starsEarned: Math.floor(subtotal / 100) * STARS_PER_DOLLAR,
+    subtotal: subtotalM,
+    tax: taxM,
+    discount: discountM,
+    total: totalM,
+    starsEarned: Math.floor(subtotalM.amount / 100) * STARS_PER_DOLLAR,
     pickup: { note: body.pickupNote },
     createdAt: now,
     updatedAt: now,

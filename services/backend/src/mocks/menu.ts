@@ -20,6 +20,7 @@ export const MOCK_MENU: Menu = {
           id: "mock-item-italian",
           name: "Italian Sub",
           description: "Ham, salami, pepperoni, provolone, lettuce, tomato, onion.",
+          imageUrl: "https://loremflickr.com/600/400/sub,sandwich?lock=11",
           available: true,
           variations: [
             { id: "mock-var-italian-6", name: "6 inch", price: usd(799), available: true },
@@ -54,6 +55,7 @@ export const MOCK_MENU: Menu = {
           id: "mock-item-turkey",
           name: "Turkey Club",
           description: "Roasted turkey, bacon, lettuce, tomato, mayo.",
+          imageUrl: "https://loremflickr.com/600/400/turkey,sandwich?lock=12",
           available: true,
           variations: [
             { id: "mock-var-turkey-6", name: "6 inch", price: usd(849), available: true },
@@ -83,6 +85,7 @@ export const MOCK_MENU: Menu = {
           id: "mock-item-shake",
           name: "Milkshake",
           description: "Chocolate, vanilla, strawberry, Oreo, or peanut butter.",
+          imageUrl: "https://loremflickr.com/600/400/milkshake?lock=13",
           available: true,
           variations: [{ id: "mock-var-shake", name: "Regular", price: usd(499), available: true }],
           modifierGroups: [
@@ -105,6 +108,7 @@ export const MOCK_MENU: Menu = {
           id: "mock-item-fountain",
           name: "Fountain Drink",
           description: "Pepsi, Coke, and more.",
+          imageUrl: "https://loremflickr.com/600/400/soda,cup?lock=14",
           available: true,
           variations: [
             { id: "mock-var-drink-sm", name: "Small", price: usd(199), available: true },
@@ -124,6 +128,7 @@ export const MOCK_MENU: Menu = {
           id: "mock-item-kitkat",
           name: "KitKat Crunch Cookie",
           description: "Our signature bakery creation.",
+          imageUrl: "https://loremflickr.com/600/400/cookie,chocolate?lock=15",
           available: true,
           variations: [{ id: "mock-var-kitkat", name: "Each", price: usd(299), available: true }],
           modifierGroups: [],
@@ -132,6 +137,7 @@ export const MOCK_MENU: Menu = {
           id: "mock-item-cookie",
           name: "Fresh Baked Cookie",
           description: "Made in-house daily — ask for today's flavor.",
+          imageUrl: "https://loremflickr.com/600/400/cookie?lock=16",
           available: true,
           variations: [{ id: "mock-var-cookie", name: "Each", price: usd(249), available: true }],
           modifierGroups: [],

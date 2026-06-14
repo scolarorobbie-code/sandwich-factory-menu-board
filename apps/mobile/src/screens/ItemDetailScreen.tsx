@@ -1,7 +1,7 @@
 import type { Modifier, ModifierGroup } from "@sf/contract";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Button } from "../components/Button";
 import { useCart } from "../state/cart";
 import { colors, dollars } from "../theme";
@@ -55,6 +55,7 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 24 }}>
+        {item.imageUrl ? <Image source={{ uri: item.imageUrl }} style={styles.hero} /> : null}
         {item.description ? <Text style={styles.desc}>{item.description}</Text> : null}
 
         {item.variations.length > 1 && (
@@ -167,6 +168,7 @@ function Stepper({ label, onPress }: { label: string; onPress: () => void }) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
+  hero: { width: "100%", height: 200, borderRadius: 16, marginBottom: 14, backgroundColor: "#2a2421" },
   desc: { color: colors.muted, fontSize: 16, lineHeight: 22 },
   groupTitle: { color: colors.text, fontSize: 18, fontWeight: "800" },
   groupSub: { color: colors.muted, fontSize: 13 },

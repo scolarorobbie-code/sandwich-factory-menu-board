@@ -2,7 +2,7 @@ import type { Menu, MenuItem } from "@sf/contract";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, SectionList, StyleSheet, Text, View } from "react-native";
 import { api } from "../api/client";
 import { useCart } from "../state/cart";
 import { colors } from "../theme";
@@ -61,10 +61,24 @@ export default function MenuScreen() {
         contentContainerStyle={{ padding: 16, paddingBottom: 96 }}
         renderSectionHeader={({ section }) => <Text style={styles.section}>{section.title}</Text>}
         renderItem={({ item }) => (
-          <Pressable style={styles.card} onPress={() => nav.navigate("ItemDetail", { item })}>
+          <Pressable
+            style={[styles.card, !item.available && { opacity: 0.55 }]}
+            onPress={() => item.available && nav.navigate("ItemDetail", { item })}
+          >
+            {item.imageUrl ? (
+              <Image source={{ uri: item.imageUrl }} style={styles.thumb} />
+            ) : (
+              <View style={[styles.thumb, styles.thumbPlaceholder]}>
+                <Text style={{ fontSize: 26 }}>🍽️</Text>
+              </View>
+            )}
             <View style={{ flex: 1 }}>
               <Text style={styles.name}>{item.name}</Text>
-              {item.description ? <Text style={styles.desc}>{item.description}</Text> : null}
+              {item.description ? (
+                <Text style={styles.desc} numberOfLines={2}>
+                  {item.description}
+                </Text>
+              ) : null}
               {!item.available ? <Text style={styles.soldout}>Sold out today</Text> : null}
             </View>
             <Text style={styles.price}>{priceLabel(item)}</Text>
@@ -92,11 +106,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.card,
     borderRadius: 16,
-    padding: 18,
+    padding: 14,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: colors.line,
   },
+  thumb: { width: 64, height: 64, borderRadius: 12, marginRight: 14, backgroundColor: "#2a2421" },
+  thumbPlaceholder: { alignItems: "center", justifyContent: "center" },
   name: { color: colors.text, fontSize: 18, fontWeight: "700" },
   desc: { color: colors.muted, fontSize: 14, marginTop: 4 },
   soldout: { color: colors.accent, fontSize: 13, marginTop: 6, fontWeight: "600" },
