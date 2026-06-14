@@ -104,33 +104,52 @@ function mapItem(
   };
 }
 
+/** Many merchants prefix modifier-group names with "1.", "2." to force order. */
+function leadingNumber(name: string): number {
+  const m = name.match(/^\s*(\d+)/);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+/** Strip a leading "3. " / "3) " / "3 - " so customers see a clean name. */
+function cleanName(name: string): string {
+  return name.replace(/^\s*\d+\s*[.)\-:]\s*/, "").trim() || name;
+}
+
 function mapModifierGroups(
   info: SquareModifierListInfo[],
   modifierLists: Map<string, SquareObject>,
 ): ModifierGroup[] {
-  const groups: ModifierGroup[] = [];
+  const built: { group: ModifierGroup; sort: number; ordinal: number }[] = [];
   for (const ref of info) {
     if (ref.enabled === false) continue;
     const list = modifierLists.get(ref.modifier_list_id);
     const ld = list?.modifier_list_data;
     if (!ld) continue;
     const single = ld.selection_type === "SINGLE";
-    const modifiers: Modifier[] = (ld.modifiers ?? []).map((m) => ({
-      id: m.id,
-      name: m.modifier_data?.name ?? "Option",
-      price: usd(m.modifier_data?.price_money?.amount),
-      available: !m.is_deleted,
-      selectedByDefault: m.modifier_data?.on_by_default,
-    }));
-    groups.push({
-      id: ref.modifier_list_id,
-      name: ld.name ?? "Options",
-      minSelections: ref.min_selected_modifiers ?? 0,
-      maxSelections: ref.max_selected_modifiers ?? (single ? 1 : modifiers.length),
-      modifiers,
+    const rawName = ld.name ?? "Options";
+    const modifiers: Modifier[] = [...(ld.modifiers ?? [])]
+      .sort((a, b) => (a.modifier_data?.ordinal ?? 0) - (b.modifier_data?.ordinal ?? 0))
+      .map((m) => ({
+        id: m.id,
+        name: m.modifier_data?.name ?? "Option",
+        price: usd(m.modifier_data?.price_money?.amount),
+        available: !m.is_deleted,
+        selectedByDefault: m.modifier_data?.on_by_default,
+      }));
+    built.push({
+      group: {
+        id: ref.modifier_list_id,
+        name: cleanName(rawName),
+        minSelections: ref.min_selected_modifiers ?? 0,
+        maxSelections: ref.max_selected_modifiers ?? (single ? 1 : modifiers.length),
+        modifiers,
+      },
+      sort: leadingNumber(rawName),
+      ordinal: ref.ordinal ?? 0,
     });
   }
-  return groups;
+  // Order groups by the number in their name (1, 2, 3…), then Square's ordinal.
+  built.sort((a, b) => a.sort - b.sort || a.ordinal - b.ordinal);
+  return built.map((b) => b.group);
 }
 
 /** Mark variations sold out when Square Inventory reports zero on-hand. */
@@ -257,7 +276,7 @@ interface SquareObject {
     selection_type?: string;
     modifiers?: SquareObject[];
   };
-  modifier_data?: { name?: string; price_money?: { amount?: number }; on_by_default?: boolean };
+  modifier_data?: { name?: string; price_money?: { amount?: number }; on_by_default?: boolean; ordinal?: number };
   item_data?: {
     name?: string;
     description?: string;
@@ -274,4 +293,5 @@ interface SquareModifierListInfo {
   enabled?: boolean;
   min_selected_modifiers?: number;
   max_selected_modifiers?: number;
+  ordinal?: number;
 }
