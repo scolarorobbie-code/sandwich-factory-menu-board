@@ -143,6 +143,21 @@ Duplicate webhooks ignored.
 Plan with Opus 4.8; build the bulk with Sonnet 4.6; mechanical edits with
 Haiku 4.5; Fable 5 only when Opus stalls on a hard knot.
 
+## Deferred / roadmap (owner-confirmed — keep in mind)
+
+- **Merchant control panel (Orda-style admin dashboard) — owner WANTS this, build
+  later.** Square's native modifier controls are limited, so per-group rules live
+  in a layer on top of Square (the Orda model). The panel will control: modifier
+  group required/optional + min/max (e.g., bread = pick exactly 1), **conditional
+  modifiers** (e.g., show "Choose your drink" only when a combo is picked),
+  hide/sold-out items, prep time → `pickup_at`, and app-exclusive deals. Square
+  stays the source of truth for items + prices; the panel stores overrides.
+  Until then: set limits in Square's own dashboard where possible.
+- **Design decisions (2026-06-14):** photos = real Square + AI placeholder
+  fallback (done); brand = match sandwichfactorytn.com (awaiting logo + colors);
+  customization = collapsible groups (done); loyalty = use the merchant's Square
+  Loyalty program; current focus = premium look.
+
 ## Repo note
 
 The existing `tv-*.html` files are the in-store **digital menu boards** (Roku/TV
