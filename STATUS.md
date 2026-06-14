@@ -37,12 +37,34 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   modifiers, hide items, prep time, deals). Tracked in CLAUDE.md.
 
 ## Next steps (in priority order)
-1. **Branding** — once he sends his logo: extract colors, apply theme, add logo to
+1. **Run a real end-to-end test order** — the full flow is built and ready.
+   See the test protocol below.
+2. **Branding** — once he sends his logo: extract colors, apply theme, add logo to
    header + splash. (Blocked on the logo image.)
-2. **Run a real end-to-end test order** on the real menu (pay → Square order →
-   staff alert → ready) to confirm Phase 1 done.
 3. **Wire Square Loyalty** (real Stars earn/redeem via Loyalty API).
 4. **Merchant control panel** (deferred but owner wants it).
+
+## Test order protocol (Phase 1 verification)
+Do this to prove the real square loop works:
+
+**Before you start:** backend must be running (`npm run backend:dev` → wait for
+`Ready on http://localhost:8787`). App must be open in simulator.
+
+1. In the app: tap a combo sandwich (e.g. "Mile High Corned Beef").
+2. Pick a size/variation. Choose a combo modifier if one is shown. The "Choose
+   Your Drink" group should auto-appear — pick a drink.
+3. Tap "Add 1 · $X.XX". You'll land in the cart.
+4. Tap "Go to checkout". If not signed in, create an account (any email/password).
+5. Checkout screen shows the order total (tax computed by Square, not us).
+6. Tap the gold "Pay $X.XX" button — this uses Square's sandbox test card nonce;
+   no real money moves.
+7. **Verify in Square dashboard (sandbox):**
+   - Go to squareupsandbox.com → Orders. Your order should appear as PICKUP.
+8. Order Status screen shows "Order received". Tap "Simulate staff updating the
+   order" twice → status moves MAKING → READY → shows "Come grab it at the counter!"
+9. Check the staff push: if ntfy.sh / Expo push token is set, a notification fires.
+
+If any step fails, copy the red error text and send it here.
 
 ## How to run locally / connect Square
 See **COMMANDS.md**. Square integration spec: **docs/SQUARE_INTEGRATION.md**.
