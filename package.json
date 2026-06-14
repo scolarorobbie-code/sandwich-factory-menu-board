@@ -12,6 +12,7 @@
     "backend:dev": "npm --workspace services/backend run dev",
     "mobile:start": "npm --workspace apps/mobile run start",
     "connect-square": "npm --workspace services/backend run connect-square",
-    "mirror-catalog": "npm --workspace services/backend run mirror-catalog"
+    "mirror-catalog": "npm --workspace services/backend run mirror-catalog",
+    "add-drink-set": "npm --workspace services/backend run add-drink-set"
   }
 }

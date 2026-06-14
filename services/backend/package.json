@@ -9,6 +9,7 @@
     "deploy": "wrangler deploy",
     "connect-square": "node scripts/connect-square.mjs",
     "mirror-catalog": "node scripts/mirror-catalog.mjs",
+    "add-drink-set": "node scripts/add-drink-set.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
