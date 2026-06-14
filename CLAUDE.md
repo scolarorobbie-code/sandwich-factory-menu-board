@@ -83,6 +83,15 @@ native code. Resolution we are committing to:
 typed `types.ts`). **Both workstreams build against the contract.** Treat changes
 to it as deliberate, reviewed events — do not let any stream silently change it.
 
+## Square integration is the source of truth for menu/pricing/orders
+
+`docs/SQUARE_INTEGRATION.md` is the canonical spec (researched from Orda's model)
+for how we ride on Square. **Read it before building any Square-touching
+feature.** Core rule: the Square dashboard is the merchant's source of truth —
+never store prices/menu/loyalty as our own source, never use a non-Square
+payment processor, never hardcode location IDs. For each feature ask "does
+Square have an API for this?" — if yes, use it; if no, build on Square data.
+
 ## Tech stack
 
 - **Mobile:** React Native + Expo (EAS Build), TypeScript.
