@@ -31,19 +31,31 @@ const usd = (cents: number | bigint | undefined): Money => ({
  * and live "sold out" availability from Square Inventory.
  */
 export async function fetchLiveMenu(env: Env): Promise<Menu> {
-  const res = await squareFetch(env, "/v2/catalog/search", {
-    method: "POST",
-    body: JSON.stringify({
-      object_types: ["ITEM", "CATEGORY", "MODIFIER_LIST", "IMAGE"],
-      include_related_objects: true,
-    }),
-  });
-  if (!res.ok) {
-    throw new Error(`Square catalog error ${res.status}: ${await res.text()}`);
-  }
+  // Square paginates /v2/catalog/search. With a full menu (200+ objects) the
+  // result spans several pages — we MUST follow the cursor or we silently drop
+  // everything past page 1 (which once hid combo drink lists from the app).
+  const objects: SquareObject[] = [];
+  const relatedObjects: SquareObject[] = [];
+  let cursor: string | undefined;
+  do {
+    const res = await squareFetch(env, "/v2/catalog/search", {
+      method: "POST",
+      body: JSON.stringify({
+        object_types: ["ITEM", "CATEGORY", "MODIFIER_LIST", "IMAGE"],
+        include_related_objects: true,
+        ...(cursor ? { cursor } : {}),
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`Square catalog error ${res.status}: ${await res.text()}`);
+    }
+    const page = (await res.json()) as SquareCatalogResponse;
+    objects.push(...(page.objects ?? []));
+    relatedObjects.push(...(page.related_objects ?? []));
+    cursor = page.cursor;
+  } while (cursor);
 
-  const data = (await res.json()) as SquareCatalogResponse;
-  const all = [...(data.objects ?? []), ...(data.related_objects ?? [])];
+  const all = [...objects, ...relatedObjects];
 
   // Lookup maps from related objects.
   const imageUrls = new Map<string, string>();
@@ -60,7 +72,7 @@ export async function fetchLiveMenu(env: Env): Promise<Menu> {
   const uncategorized: MenuCategory = { id: "uncategorized", name: "Menu", ordinal: 999, items: [] };
   const variationIds: string[] = [];
 
-  for (const o of data.objects ?? []) {
+  for (const o of objects) {
     if (o.type !== "ITEM" || !o.item_data) continue;
     const item = mapItem(o, imageUrls, modifierLists);
     item.variations.forEach((v) => variationIds.push(v.id));
@@ -75,7 +87,7 @@ export async function fetchLiveMenu(env: Env): Promise<Menu> {
   await applyInventory(env, variationIds, result);
 
   return {
-    version: String(data.cursor ?? Date.now()),
+    version: String(Date.now()),
     fetchedAt: new Date().toISOString(),
     categories: result.sort((a, b) => a.ordinal - b.ordinal),
   };
