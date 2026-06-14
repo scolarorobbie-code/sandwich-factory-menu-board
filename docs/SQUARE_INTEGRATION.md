@@ -8,10 +8,13 @@
 
 ## Scope note for THIS app (Sandwich Factory)
 
-Sandwich Factory is a **single location, single merchant, pickup-only** app
-(see CLAUDE.md ground truth). This reference describes the full Orda-style
-platform; the items marked _[platform-only]_ below are **out of scope** unless
-the owner decides to expand into a multi-location / multi-merchant product.
+**Decision (2026-06-14): "single location now, architected to grow."** Build the
+single-merchant, pickup-only app (one stored Square token, no OAuth UI, no
+location selector). BUT keep all Square calls dynamic and location-driven (never
+hardcode a location ID in business logic — resolve it from config/Locations API)
+so adding locations later needs no rewrite. Multi-merchant OAuth, franchise
+dashboards, and the location selector stay deferred until/unless the owner
+expands.
 
 ---
 
