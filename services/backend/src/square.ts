@@ -31,7 +31,7 @@ const usd = (cents: number | bigint | undefined): Money => ({
  * and live "sold out" availability from Square Inventory.
  */
 export async function fetchLiveMenu(env: Env): Promise<Menu> {
-  const res = await squareFetch(env, "/v2/catalog/search-catalog-objects", {
+  const res = await squareFetch(env, "/v2/catalog/search", {
     method: "POST",
     body: JSON.stringify({
       object_types: ["ITEM", "CATEGORY", "MODIFIER_LIST", "IMAGE"],
