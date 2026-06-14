@@ -80,8 +80,8 @@ do {
   cursor = page.cursor;
 } while (cursor);
 
-const categories = prodObjects.filter((o) => o.type === "CATEGORY");
-const modifierLists = prodObjects.filter((o) => o.type === "MODIFIER_LIST");
+const categories = prodObjects.filter((o) => o.type === "CATEGORY" && !o.is_deleted);
+const modifierLists = prodObjects.filter((o) => o.type === "MODIFIER_LIST" && !o.is_deleted);
 const items = prodObjects.filter((o) => o.type === "ITEM" && !o.is_deleted);
 console.log(`   Found ${items.length} items, ${categories.length} categories, ${modifierLists.length} modifier lists.`);
 if (items.length === 0) fail("No items found in your production catalog. Is this the right Square account?");
@@ -89,15 +89,73 @@ if (items.length === 0) fail("No items found in your production catalog. Is this
 const categoryIds = new Set(categories.map((c) => c.id));
 const modifierListIds = new Set(modifierLists.map((m) => m.id));
 
-// 2) Build sanitized objects with stable temp ids (strip env-specific fields).
-const upserts = [];
+// Square counts nested variations/modifiers toward the 1000-per-batch limit.
+const weight = (o) =>
+  o.type === "ITEM"
+    ? 1 + (o.item_data?.variations?.length ?? 0)
+    : o.type === "MODIFIER_LIST"
+      ? 1 + (o.modifier_list_data?.modifiers?.length ?? 0)
+      : 1;
 
-for (const c of categories) {
-  upserts.push({ type: "CATEGORY", id: tempId(c.id), category_data: { name: c.category_data?.name ?? "Category" } });
+/**
+ * Upsert top-level objects, one batch per request (temp ids are scoped to a
+ * single batch in Square), packing each batch to <= 900 total objects.
+ * Returns a map of "#tempId" -> real Square id from Square's id_mappings.
+ * Objects passed here must NOT reference each other by temp id across batches.
+ */
+async function upsertAll(objects) {
+  const idMap = {};
+  let batch = [];
+  let w = 0;
+  const flush = async () => {
+    if (!batch.length) return;
+    const res = await sq(SANDBOX, sandboxToken, "/v2/catalog/batch-upsert", {
+      method: "POST",
+      body: JSON.stringify({
+        idempotency_key: `mirror-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        batches: [{ objects: batch }],
+      }),
+    });
+    for (const m of res.id_mappings ?? []) idMap[m.client_object_id] = m.object_id;
+    batch = [];
+    w = 0;
+  };
+  for (const o of objects) {
+    const ow = weight(o);
+    if (batch.length && w + ow > 900) await flush();
+    batch.push(o);
+    w += ow;
+  }
+  await flush();
+  return idMap;
 }
 
+// 2) Clear whatever is currently in the sandbox catalog (seeded/previous items).
+console.log("🧹 Clearing the old test items from the sandbox…");
+const existing = [];
+let scursor;
+do {
+  const qs = `types=ITEM,CATEGORY,MODIFIER_LIST,IMAGE${scursor ? `&cursor=${encodeURIComponent(scursor)}` : ""}`;
+  const page = await sq(SANDBOX, sandboxToken, `/v2/catalog/list?${qs}`);
+  existing.push(...(page.objects ?? []).map((o) => o.id));
+  scursor = page.cursor;
+} while (scursor);
+for (let i = 0; i < existing.length; i += 200) {
+  await sq(SANDBOX, sandboxToken, "/v2/catalog/batch-delete", {
+    method: "POST",
+    body: JSON.stringify({ object_ids: existing.slice(i, i + 200) }),
+  });
+}
+
+// 3) PASS 1 — categories + modifier lists. These don't reference each other, so
+//    they can be split across batches safely. We capture their real ids.
+console.log("📤 Pass 1: categories & toppings…");
+const pass1 = [];
+for (const c of categories) {
+  pass1.push({ type: "CATEGORY", id: tempId(c.id), category_data: { name: c.category_data?.name ?? "Category" } });
+}
 for (const ml of modifierLists) {
-  upserts.push({
+  pass1.push({
     type: "MODIFIER_LIST",
     id: tempId(ml.id),
     modifier_list_data: {
@@ -115,36 +173,44 @@ for (const ml of modifierLists) {
     },
   });
 }
+const idMap = await upsertAll(pass1);
 
+// 4) PASS 2 — items, referencing the REAL category + modifier-list ids (so no
+//    cross-batch temp references). Items don't reference each other.
+console.log(`📤 Pass 2: ${items.length} items…`);
+const itemObjects = [];
 for (const it of items) {
   const d = it.item_data ?? {};
-  // Resolve category from any of Square's shapes, only if we mirrored it.
-  const rawCat = d.reporting_category?.id ?? d.categories?.[0]?.id ?? d.category_id;
-  const category_id = rawCat && categoryIds.has(rawCat) ? tempId(rawCat) : undefined;
+  const variations = (d.variations ?? [])
+    .filter((v) => !v.is_deleted)
+    .map((v) => ({
+      type: "ITEM_VARIATION",
+      id: tempId(v.id),
+      item_variation_data: {
+        item_id: tempId(it.id),
+        name: v.item_variation_data?.name ?? "Regular",
+        pricing_type: v.item_variation_data?.pricing_type ?? "FIXED_PRICING",
+        price_money: v.item_variation_data?.price_money,
+      },
+    }));
+  if (variations.length === 0) continue; // an item needs at least one size
 
-  upserts.push({
+  const rawCat = d.reporting_category?.id ?? d.categories?.[0]?.id ?? d.category_id;
+  const realCat = rawCat && categoryIds.has(rawCat) ? idMap[tempId(rawCat)] : undefined;
+
+  itemObjects.push({
     type: "ITEM",
     id: tempId(it.id),
     item_data: {
       name: d.name ?? "Item",
       description: d.description,
-      category_id,
-      variations: (d.variations ?? [])
-        .filter((v) => !v.is_deleted)
-        .map((v) => ({
-          type: "ITEM_VARIATION",
-          id: tempId(v.id),
-          item_variation_data: {
-            item_id: tempId(it.id),
-            name: v.item_variation_data?.name ?? "Regular",
-            pricing_type: v.item_variation_data?.pricing_type ?? "FIXED_PRICING",
-            price_money: v.item_variation_data?.price_money,
-          },
-        })),
+      ...(realCat ? { categories: [{ id: realCat }], reporting_category: { id: realCat } } : {}),
+      variations,
       modifier_list_info: (d.modifier_list_info ?? [])
-        .filter((mli) => modifierListIds.has(mli.modifier_list_id))
+        .map((mli) => ({ ...mli, real: idMap[tempId(mli.modifier_list_id)] }))
+        .filter((mli) => mli.real)
         .map((mli) => ({
-          modifier_list_id: tempId(mli.modifier_list_id),
+          modifier_list_id: mli.real,
           enabled: mli.enabled !== false,
           min_selected_modifiers: mli.min_selected_modifiers,
           max_selected_modifiers: mli.max_selected_modifiers,
@@ -152,62 +218,11 @@ for (const it of items) {
     },
   });
 }
-
-// 3) Clear whatever is currently in the sandbox catalog (the seeded test items).
-console.log("🧹 Clearing the old test items from the sandbox…");
-const existing = [];
-let scursor;
-do {
-  const qs = `types=ITEM,CATEGORY,MODIFIER_LIST,IMAGE${scursor ? `&cursor=${encodeURIComponent(scursor)}` : ""}`;
-  const page = await sq(SANDBOX, sandboxToken, `/v2/catalog/list?${qs}`);
-  existing.push(...(page.objects ?? []).map((o) => o.id));
-  scursor = page.cursor;
-} while (scursor);
-if (existing.length) {
-  for (let i = 0; i < existing.length; i += 200) {
-    await sq(SANDBOX, sandboxToken, "/v2/catalog/batch-delete", {
-      method: "POST",
-      body: JSON.stringify({ object_ids: existing.slice(i, i + 200) }),
-    });
-  }
-}
-
-// 4) Write your real menu into the sandbox. Square counts NESTED objects
-//    (each variation, each modifier) toward the 1000-per-batch limit, and
-//    cross-references must resolve within ONE request — so we pack everything
-//    into one request split into multiple batches, each <= ~900 total objects.
-console.log(`📤 Copying ${items.length} items into the sandbox…`);
-
-const weight = (o) =>
-  o.type === "ITEM"
-    ? 1 + (o.item_data?.variations?.length ?? 0)
-    : o.type === "MODIFIER_LIST"
-      ? 1 + (o.modifier_list_data?.modifiers?.length ?? 0)
-      : 1;
-
-const batches = [];
-let current = [];
-let currentWeight = 0;
-for (const obj of upserts) {
-  const w = weight(obj);
-  if (current.length && currentWeight + w > 900) {
-    batches.push({ objects: current });
-    current = [];
-    currentWeight = 0;
-  }
-  current.push(obj);
-  currentWeight += w;
-}
-if (current.length) batches.push({ objects: current });
-
-await sq(SANDBOX, sandboxToken, "/v2/catalog/batch-upsert", {
-  method: "POST",
-  body: JSON.stringify({ idempotency_key: `mirror-${Date.now()}`, batches }),
-});
+await upsertAll(itemObjects);
 
 console.log(`
 🎉 Done! Your real menu is now in the sandbox.
-   • ${items.length} items copied (prices, sizes, and toppings included).
+   • ${itemObjects.length} items copied (prices, sizes, and toppings included).
    • Photos are not copied yet — that's a separate step.
    • Restart the backend and reload the app to see YOUR menu.
 `);
