@@ -8,6 +8,7 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "connect-square": "node scripts/connect-square.mjs",
+    "mirror-catalog": "node scripts/mirror-catalog.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -11,6 +11,7 @@
   "scripts": {
     "backend:dev": "npm --workspace services/backend run dev",
     "mobile:start": "npm --workspace apps/mobile run start",
-    "connect-square": "npm --workspace services/backend run connect-square"
+    "connect-square": "npm --workspace services/backend run connect-square",
+    "mirror-catalog": "npm --workspace services/backend run mirror-catalog"
   }
 }
