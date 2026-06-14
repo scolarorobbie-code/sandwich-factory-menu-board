@@ -1,0 +1,21 @@
+{
+  "name": "@sf/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Sandwich Factory backend — Cloudflare Worker. Holds Square credentials; serves menu, orders, payments, webhooks.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "connect-square": "node scripts/connect-square.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sf/contract": "*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^3.78.0"
+  }
+}

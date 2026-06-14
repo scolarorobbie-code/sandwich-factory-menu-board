@@ -1,0 +1,700 @@
+openapi: 3.1.0
+info:
+  title: Sandwich Factory Ordering API
+  version: 0.1.0
+  description: >
+    Contract between the Sandwich Factory mobile app (React Native + Expo) and
+    the backend (Cloudflare Workers). The backend is the only component that
+    holds Square credentials. Pickup only — no delivery. Cards are tokenized
+    on-device by the Square In-App Payments SDK; the API only ever sees an opaque
+    payment token (sourceId). Keep in sync with types.ts.
+servers:
+  - url: https://api.sandwichfactorytn.com
+    description: Production backend
+  - url: https://sandbox-api.sandwichfactorytn.com
+    description: Sandbox backend (Square sandbox)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Menu
+  - name: Auth
+  - name: Orders
+  - name: Payments
+  - name: Loyalty
+  - name: Deals
+  - name: Favorites
+  - name: Devices
+  - name: System
+  - name: Webhooks
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness + environment info
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /menu:
+    get:
+      tags: [Menu]
+      summary: Full menu, proxied + cached from Square Catalog
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Menu" }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Create an account (email + password)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with email + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /auth/apple:
+    post:
+      tags: [Auth]
+      summary: Sign in with Apple
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AppleAuthRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for new tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Current customer profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /orders:
+    get:
+      tags: [Orders]
+      summary: Order history for the current customer
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/Order" }
+    post:
+      tags: [Orders]
+      summary: Create an order in Square (not yet paid)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOrderRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateOrderResponse" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Fetch a single order (poll for status; push is primary)
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /payments:
+    post:
+      tags: [Payments]
+      summary: Pay for an order with an on-device card token
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePaymentRequest" }
+      responses:
+        "200":
+          description: Paid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatePaymentResponse" }
+        "402": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /loyalty:
+    get:
+      tags: [Loyalty]
+      summary: Current customer's Stars balance + reward tiers
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Loyalty" }
+
+  /deals:
+    get:
+      tags: [Deals]
+      summary: Active app-exclusive deals
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Deal" }
+
+  /favorites:
+    get:
+      tags: [Favorites]
+      summary: Saved favorites for one-tap reorder
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Favorite" }
+    post:
+      tags: [Favorites]
+      summary: Save a favorite (from scratch or from a past order)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateFavoriteRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Favorite" }
+
+  /favorites/{favoriteId}:
+    delete:
+      tags: [Favorites]
+      summary: Remove a favorite
+      parameters:
+        - name: favoriteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /devices:
+    post:
+      tags: [Devices]
+      summary: Register an Expo push token for status notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterDeviceRequest" }
+      responses:
+        "204": { description: Registered }
+
+  /webhooks/square:
+    post:
+      tags: [Webhooks]
+      summary: >
+        Square webhook receiver (backend-internal). Verifies the
+        x-square-hmacsha256-signature header before trusting the body and
+        de-dupes on event_id. Not called by the mobile app.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SquareWebhookEvent" }
+      responses:
+        "200": { description: Accepted (or ignored duplicate) }
+        "401":
+          description: Signature verification failed
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated UUID; forwarded to Square so retries are safe.
+      schema: { type: string }
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Minor units (cents). }
+        currency: { type: string, enum: [USD] }
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                [
+                  UNAUTHENTICATED,
+                  FORBIDDEN,
+                  NOT_FOUND,
+                  VALIDATION_FAILED,
+                  CONFLICT,
+                  ITEM_UNAVAILABLE,
+                  PAYMENT_DECLINED,
+                  RATE_LIMITED,
+                  SQUARE_ERROR,
+                  INTERNAL,
+                ]
+            message: { type: string }
+            details: {}
+
+    Paginated:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {}
+        cursor: { type: string }
+
+    Health:
+      type: object
+      required: [status, squareEnvironment, apiVersion, time]
+      properties:
+        status: { type: string, enum: [ok] }
+        squareEnvironment: { type: string, enum: [sandbox, production] }
+        apiVersion: { type: string, example: "2026-01-22" }
+        time: { type: string, format: date-time }
+
+    Menu:
+      type: object
+      required: [categories, version, fetchedAt]
+      properties:
+        version: { type: string }
+        fetchedAt: { type: string, format: date-time }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/MenuCategory" }
+
+    MenuCategory:
+      type: object
+      required: [id, name, ordinal, items]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ordinal: { type: integer }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/MenuItem" }
+
+    MenuItem:
+      type: object
+      required: [id, name, variations, modifierGroups, available]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        imageUrl: { type: string, format: uri }
+        available: { type: boolean }
+        variations:
+          type: array
+          items: { $ref: "#/components/schemas/MenuVariation" }
+        modifierGroups:
+          type: array
+          items: { $ref: "#/components/schemas/ModifierGroup" }
+
+    MenuVariation:
+      type: object
+      required: [id, name, price, available]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        price: { $ref: "#/components/schemas/Money" }
+        available: { type: boolean }
+
+    ModifierGroup:
+      type: object
+      required: [id, name, minSelections, maxSelections, modifiers]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        minSelections: { type: integer }
+        maxSelections: { type: integer }
+        modifiers:
+          type: array
+          items: { $ref: "#/components/schemas/Modifier" }
+
+    Modifier:
+      type: object
+      required: [id, name, price, available]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        price: { $ref: "#/components/schemas/Money" }
+        available: { type: boolean }
+        selectedByDefault: { type: boolean }
+
+    CartLineItem:
+      type: object
+      required: [itemId, variationId, quantity, modifierIds]
+      properties:
+        itemId: { type: string }
+        variationId: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        modifierIds:
+          type: array
+          items: { type: string }
+        note: { type: string }
+
+    OrderLineItem:
+      type: object
+      required: [name, variationName, quantity, modifiers, total]
+      properties:
+        name: { type: string }
+        variationName: { type: string }
+        quantity: { type: integer }
+        note: { type: string }
+        total: { $ref: "#/components/schemas/Money" }
+        modifiers:
+          type: array
+          items:
+            type: object
+            required: [name, price]
+            properties:
+              name: { type: string }
+              price: { $ref: "#/components/schemas/Money" }
+
+    Order:
+      type: object
+      required:
+        [
+          id,
+          squareOrderId,
+          displayNumber,
+          status,
+          lineItems,
+          subtotal,
+          tax,
+          discount,
+          total,
+          pickup,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string }
+        squareOrderId: { type: string }
+        displayNumber: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, RECEIVED, MAKING, READY, COMPLETED, CANCELED]
+        lineItems:
+          type: array
+          items: { $ref: "#/components/schemas/OrderLineItem" }
+        subtotal: { $ref: "#/components/schemas/Money" }
+        tax: { $ref: "#/components/schemas/Money" }
+        discount: { $ref: "#/components/schemas/Money" }
+        total: { $ref: "#/components/schemas/Money" }
+        starsEarned: { type: integer }
+        pickup:
+          type: object
+          properties:
+            readyEta: { type: string, format: date-time }
+            note: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateOrderRequest:
+      type: object
+      required: [lineItems]
+      properties:
+        lineItems:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/CartLineItem" }
+        dealId: { type: string }
+        redeemStars: { type: integer, minimum: 0 }
+        pickupNote: { type: string }
+
+    CreateOrderResponse:
+      type: object
+      required: [order, amountDue]
+      properties:
+        order: { $ref: "#/components/schemas/Order" }
+        amountDue: { $ref: "#/components/schemas/Money" }
+
+    CreatePaymentRequest:
+      type: object
+      required: [orderId, sourceId]
+      properties:
+        orderId: { type: string }
+        sourceId:
+          type: string
+          description: Opaque payment token from the In-App Payments SDK.
+        verificationToken: { type: string }
+
+    CreatePaymentResponse:
+      type: object
+      required: [order, paymentId]
+      properties:
+        order: { $ref: "#/components/schemas/Order" }
+        paymentId: { type: string }
+        receiptUrl: { type: string, format: uri }
+
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, expiresIn]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer }
+
+    AuthResponse:
+      allOf:
+        - $ref: "#/components/schemas/AuthTokens"
+        - type: object
+          required: [customer]
+          properties:
+            customer: { $ref: "#/components/schemas/Customer" }
+
+    RegisterRequest:
+      type: object
+      required: [email, password, firstName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AppleAuthRequest:
+      type: object
+      required: [identityToken, authorizationCode]
+      properties:
+        identityToken: { type: string }
+        authorizationCode: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    Customer:
+      type: object
+      required: [id, squareCustomerId, email, firstName, createdAt]
+      properties:
+        id: { type: string }
+        squareCustomerId: { type: string }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    Loyalty:
+      type: object
+      required: [stars, earnRule, rewards]
+      properties:
+        stars: { type: integer }
+        earnRule: { type: string, example: "1 Star per $1" }
+        rewards:
+          type: array
+          items: { $ref: "#/components/schemas/LoyaltyReward" }
+
+    LoyaltyReward:
+      type: object
+      required: [id, name, cost, value]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        cost: { type: integer }
+        value: { $ref: "#/components/schemas/Money" }
+
+    Deal:
+      type: object
+      required: [id, title, description, startsAt, endsAt, appExclusive]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        imageUrl: { type: string, format: uri }
+        code: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        appExclusive: { type: boolean }
+
+    Favorite:
+      type: object
+      required: [id, name, lineItems, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+        lineItems:
+          type: array
+          items: { $ref: "#/components/schemas/CartLineItem" }
+
+    CreateFavoriteRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        fromOrderId: { type: string }
+        lineItems:
+          type: array
+          items: { $ref: "#/components/schemas/CartLineItem" }
+
+    RegisterDeviceRequest:
+      type: object
+      required: [expoPushToken, platform]
+      properties:
+        expoPushToken: { type: string }
+        platform: { type: string, enum: [ios, android] }
+
+    SquareWebhookEvent:
+      type: object
+      required: [event_id, type, merchant_id, created_at, data]
+      properties:
+        event_id: { type: string }
+        type: { type: string }
+        merchant_id: { type: string }
+        created_at: { type: string, format: date-time }
+        data:
+          type: object
+          required: [type, id, object]
+          properties:
+            type: { type: string }
+            id: { type: string }
+            object: {}

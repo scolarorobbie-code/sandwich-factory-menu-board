@@ -1,0 +1,16 @@
+{
+  "name": "sandwich-factory",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sandwich Factory pickup ordering app — Expo app + Cloudflare Worker backend, Square-integrated.",
+  "workspaces": [
+    "contract",
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "backend:dev": "npm --workspace services/backend run dev",
+    "mobile:start": "npm --workspace apps/mobile run start",
+    "connect-square": "npm --workspace services/backend run connect-square"
+  }
+}
