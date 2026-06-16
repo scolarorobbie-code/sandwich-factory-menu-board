@@ -137,7 +137,7 @@ expands.
 | Prep time → pickup_at | configurable | ⬜ TODO |
 | Payments | Payments API | ✅ `payments.ts` (token → CreatePayment) |
 | Auth/customers | OAuth + Customers API | 🟡 single stored token; app users are local JWT, Square customer link is mocked (TODO: real Customers API) |
-| Loyalty | Loyalty API | 🟡 mocked Stars; TODO accumulate/redeem via Square |
+| Loyalty | Loyalty API | ✅ wired (`loyalty.ts`): program lookup, find-or-create account by phone, balance, accumulate-on-payment, reward redemption on the order. Square is source of truth in LIVE; mock keeps local Stars. Fails open (no crash) when no program exists. App redeem UI = TODO. |
 | Webhooks | verify + dedupe + react | 🟡 verify+dedupe done; TODO branch catalog/order/payment |
 | Locations | Locations API | 🟡 single location via env; auto-fetch in `connect-square` |
 | Gift cards / wallet / tips | Square APIs | ⬜ not built |

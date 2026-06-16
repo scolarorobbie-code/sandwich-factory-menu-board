@@ -14,8 +14,11 @@ export interface StoredUser {
   /** PBKDF2 hash; absent for Apple-only accounts. */
   passwordHash?: string;
   passwordSalt?: string;
-  /** Loyalty Stars balance (Square Loyalty in production). */
+  /** Loyalty Stars balance — mock-mode source of truth. In LIVE mode Square
+   * Loyalty is authoritative; this is only a display fallback. */
   stars: number;
+  /** Cached Square Loyalty account id (resolved by phone on first earn/redeem). */
+  loyaltyAccountId?: string;
   /** Registered Expo push tokens. */
   pushTokens: { token: string; platform: "ios" | "android" }[];
 }

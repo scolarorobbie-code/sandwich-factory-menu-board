@@ -65,7 +65,7 @@ export default {
 
       if (pathname === "/payments" && method === "POST") return await createPayment(req, env, user!);
 
-      if (pathname === "/loyalty" && method === "GET") return getLoyalty(user!);
+      if (pathname === "/loyalty" && method === "GET") return await getLoyalty(env, user!);
 
       if (pathname === "/favorites" && method === "GET") return listFavorites(user!);
       if (pathname === "/favorites" && method === "POST") return await addFavorite(req, env, user!);
