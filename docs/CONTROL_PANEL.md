@@ -1,4 +1,4 @@
-# Merchant Control Panel — Menu Overrides (foundation)
+# Merchant Control Panel — Menu Overrides
 
 > Orda-style admin layer that sits on TOP of Square. Square stays the source of
 > truth for items, variations, prices, modifiers and photos. This layer stores
@@ -13,10 +13,37 @@ in the Square dashboard, and the app papers over the gaps with a hard-coded
 heuristic (in `apps/mobile/src/screens/ItemDetailScreen.tsx`, a "Choose your
 drink" group is revealed by regex on `/drink/` + `/combo/`). That heuristic is
 brittle. The durable fix is a small data layer the owner edits from a web panel,
-which the backend applies to the live menu. This commit builds the FOUNDATION of
-that layer — the data model, the apply step, and the admin API — not the UI.
+which the backend applies to the live menu.
 
-## What's built (this foundation)
+**Status: the web panel + admin login are now built and working** (see below).
+What remains is durable persistence (KV/D1) and having the mobile app read the
+conditional overrides so the regex heuristic can be retired.
+
+## How the owner opens it (quick start)
+
+1. Make sure the backend is running. Locally that is `npm run backend:dev`
+   (wait for `Ready on http://localhost:8787`); in production it is the deployed
+   Worker URL.
+2. Open the panel in any browser at **`<backend-url>/admin`**
+   (locally `http://localhost:8787/admin`).
+3. Enter the **admin password** and click *Sign in*. The password is the
+   `ADMIN_PASSWORD` secret (see below). The panel lists every menu item; expand
+   one to set hide / sold-out / prep-time and per-group rules, then click
+   **Save changes**.
+
+### The admin password (`ADMIN_PASSWORD`)
+
+- It is a **backend secret** — never shipped in the app, never committed.
+- **Production:** set it once with
+  `cd services/backend && npx wrangler secret put ADMIN_PASSWORD`.
+- **Local dev:** add `ADMIN_PASSWORD=...` to `services/backend/.dev.vars`
+  (gitignored), or leave it unset — when unset, the panel opens with **no
+  password in sandbox/dev only** (and stays disabled in production). See
+  `.dev.vars.example`.
+
+## What's built
+
+### Foundation (data layer)
 
 - **Schema** (`contract/types.ts`): `MenuOverrides`, `ItemOverride`,
   `GroupOverride`, `ConditionalRule`, `DealOverride` (+ `PutOverridesRequest`),
@@ -28,8 +55,37 @@ that layer — the data model, the apply step, and the admin API — not the UI.
 - **Apply step** (`services/backend/src/overrides.ts`): `applyOverrides(menu,
   overrides)` — pure, non-mutating; runs in `menu.ts getMenu()` AFTER
   `fetchLiveMenu`. So overrides never become a competing source of items/prices.
-- **Admin API** (`services/backend/src/admin.ts`, wired in `index.ts`):
-  `GET /admin/overrides` and `PUT /admin/overrides`.
+
+### Admin auth (done)
+
+- `POST /admin/login` (`services/backend/src/admin.ts`) checks the
+  `ADMIN_PASSWORD` secret (constant-time compare) and returns a short-lived
+  (8 h) **admin JWT** with `typ: "admin"`. It reuses the SAME `signJwt` /
+  `verifyJwt` HS256 helpers + `JWT_SIGNING_SECRET` as customer auth (now
+  exported from `auth.ts`) — no duplicated crypto.
+- `GET` / `PUT /admin/overrides` require that admin JWT
+  (`Authorization: Bearer …`). A customer access token can't satisfy them
+  (different `typ`) and vice-versa.
+- **Fallback for local dev:** when `ADMIN_PASSWORD` is unset, the endpoints keep
+  the original open gate — usable in sandbox/dev, hard-blocked (403) in
+  production. So local work needs no password; production needs the secret.
+
+### Web dashboard (done)
+
+- **`services/backend/public/admin.html`** — a single self-contained file
+  (vanilla HTML + CSS + `fetch()`, no build step). It prompts for the password
+  → `POST /admin/login` → stores the token → loads `GET /menu` and
+  `GET /admin/overrides`, and renders every item grouped by category. Per item:
+  toggle hidden / sold-out and set prep-time minutes. Per modifier group:
+  required / optional, min, max, and "conditional (hidden until triggered)" with
+  trigger group + trigger modifier pickers. **Save changes** PUTs the cleaned
+  `MenuOverrides` document. Clear save confirmation + inline errors; warns on
+  unsaved-changes navigation.
+- **Serving:** `GET /admin` returns the HTML inline. The file is bundled as a
+  text module via the `[[rules]] type = "Text"` entry in `wrangler.toml` and
+  `import adminHtml from "../public/admin.html"` in `index.ts`
+  (typed by `src/html.d.ts`). Works in `wrangler dev` and `wrangler deploy` with
+  no extra toolchain.
 
 ### What each field does
 
@@ -75,39 +131,41 @@ ignores the field. The migration is deliberate and reviewed:
 
 ## What remains to build
 
-1. **Web UI** — the actual control panel the owner uses. A small admin SPA (or a
-   page in an existing admin host) that: lists the live menu (`GET /menu`),
-   shows per-item toggles (hide / sold-out / prep time) and per-group controls
-   (required, min/max, "reveal only when …" conditional picker), then PUTs the
-   whole `MenuOverrides` document. Keep it dumb: read menu, edit overrides, save.
-2. **Admin auth** — `TODO(admin-auth)`. The endpoints are currently self-gated to
-   dev/sandbox only (`adminAllowed()` returns false in production → 403). Before
-   production they need a real admin identity, separate from customer JWTs: an
-   admin role/token or a signed session for the owner's panel. This is the one
-   hard blocker before the panel can go live.
-3. **KV / D1 persistence** — replace the in-memory document in `overridesStore`
-   with Workers KV (single JSON blob keyed e.g. `menu:overrides`) or D1. Only
-   `get()` / `put()` change; `applyOverrides` is already storage-agnostic. Add
-   the binding to `env.ts` + `wrangler.toml`.
-4. **Mobile reads overrides** — the app already gets overridden min/max/hidden/
-   sold-out transparently through `GET /menu` (applied server-side). The
-   remaining work is consuming `__conditional` to replace the regex (see bridge
-   above).
-5. **Prep time → `pickup_at`** — read `prepTimeMinutes` in `orders.ts` /
+1. **KV / D1 persistence (next priority)** — the overrides document still lives
+   in `overridesStore`'s in-memory variable, so it resets on every Worker
+   restart/redeploy. Replace `get()` / `put()` with Workers KV (single JSON blob
+   keyed e.g. `menu:overrides`) or D1. `applyOverrides` is already
+   storage-agnostic, so nothing else changes; add the binding to `env.ts` +
+   `wrangler.toml`. **Until this lands, treat saved overrides as ephemeral.**
+2. **Mobile reads the conditional overrides (retire the regex)** — the app
+   already gets overridden min/max/hidden/sold-out transparently through
+   `GET /menu` (applied server-side). The remaining work is consuming the
+   `__conditional` metadata to replace the `/drink/` + `/combo/` regex in
+   `ItemDetailScreen` — the owner can now author those rules in the panel:
+   promote `__conditional` onto the contract `ModifierGroup`, make
+   `ItemDetailScreen` read it (falling back to the regex when absent), then
+   delete the regex (see bridge above).
+3. **Prep time → `pickup_at`** — read `prepTimeMinutes` in `orders.ts` /
    `square.ts createSquareOrder` and set the Square fulfillment `pickup_at`.
-   (Tracks the existing TODO in `docs/SQUARE_INTEGRATION.md`.)
-6. **Deals into the panel** — `DealOverride` is a stub. Move the hard-coded deals
+   (Tracks the existing TODO in `docs/SQUARE_INTEGRATION.md`.) The panel already
+   captures the value; it just isn't wired into order creation yet.
+4. **Deals into the panel** — `DealOverride` is a stub. Move the hard-coded deals
    in `menu.ts getDeals()` behind the overrides store so the owner edits them.
+   (The panel currently edits items/groups only.)
 
 ## Endpoints
 
-| Method | Path | Body | Returns |
-|---|---|---|---|
-| GET | `/admin/overrides` | — | `MenuOverrides` |
-| PUT | `/admin/overrides` | `PutOverridesRequest` | saved `MenuOverrides` |
+| Method | Path | Auth | Body | Returns |
+|---|---|---|---|---|
+| GET | `/admin` | — | — | control-panel HTML page |
+| POST | `/admin/login` | — | `{ password }` | `{ token, expiresIn }` |
+| GET | `/admin/overrides` | admin JWT | — | `MenuOverrides` |
+| PUT | `/admin/overrides` | admin JWT | `PutOverridesRequest` | saved `MenuOverrides` |
 
-Both return `403` in production until admin auth lands. `PUT` returns `422` on a
-malformed body.
+When `ADMIN_PASSWORD` is set, the overrides routes require the admin JWT
+(`401` without it). When it is unset they fall back to the dev/sandbox open gate
+(and `403` in production). `POST /admin/login` returns `401` on a wrong password.
+`PUT` returns `422` on a malformed body.
 
 ### Example `PUT /admin/overrides`
 
