@@ -41,13 +41,20 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-interface JwtClaims {
-  sub: string; // userId
-  typ: "access" | "refresh";
+/** JWT subject type. Customer tokens use access/refresh; admin panel uses admin. */
+export type JwtType = "access" | "refresh" | "admin";
+
+export interface JwtClaims {
+  sub: string; // userId (or "admin" for the control-panel session)
+  typ: JwtType;
   exp: number;
 }
 
-async function signJwt(secret: string, claims: JwtClaims): Promise<string> {
+/**
+ * Sign an HS256 JWT. Exported so the admin panel can mint its own short-lived
+ * session token without duplicating the crypto here (see admin.ts).
+ */
+export async function signJwt(secret: string, claims: JwtClaims): Promise<string> {
   const header = b64urlJson({ alg: "HS256", typ: "JWT" });
   const payload = b64urlJson(claims);
   const data = `${header}.${payload}`;
@@ -55,7 +62,8 @@ async function signJwt(secret: string, claims: JwtClaims): Promise<string> {
   return `${data}.${b64url(sig)}`;
 }
 
-async function verifyJwt(secret: string, token: string, typ: "access" | "refresh"): Promise<JwtClaims | null> {
+/** Verify an HS256 JWT and require its `typ`. Exported for admin auth. */
+export async function verifyJwt(secret: string, token: string, typ: JwtType): Promise<JwtClaims | null> {
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [header, payload, sig] = parts;
@@ -70,6 +78,11 @@ async function verifyJwt(secret: string, token: string, typ: "access" | "refresh
   if (claims.typ !== typ) return null;
   if (claims.exp * 1000 < Date.now()) return null;
   return claims;
+}
+
+/** Constant-time string compare (exported for the admin password check). */
+export function timingSafeEqual(a: string, b: string): boolean {
+  return constantTimeEqual(a, b);
 }
 
 async function issueTokens(env: Env, userId: string): Promise<AuthTokens> {
