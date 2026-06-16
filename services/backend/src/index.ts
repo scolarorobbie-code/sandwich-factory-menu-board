@@ -1,6 +1,7 @@
 import type { Health } from "@sf/contract";
 import { addFavorite, getLoyalty, listFavorites, registerDevice, removeFavorite } from "./account";
-import { getOverrides, putOverrides } from "./admin";
+import { adminLogin, getOverrides, putOverrides } from "./admin";
+import adminHtml from "../public/admin.html";
 import { appleAuth, login, me, refresh, register, requireAuth } from "./auth";
 import type { Env } from "./env";
 import { getDeals, getMenu } from "./menu";
@@ -48,9 +49,17 @@ export default {
       }
 
       // ---------- Merchant control panel (admin) ----------
-      // Foundation only: self-gated to dev/sandbox until admin auth is built
-      // (see admin.ts adminAllowed + TODO). Not a customer-JWT route.
-      if (pathname === "/admin/overrides" && method === "GET") return getOverrides(env);
+      // Auth: POST /admin/login exchanges ADMIN_PASSWORD for a short-lived admin
+      // JWT; the overrides routes require it (Authorization: Bearer). When
+      // ADMIN_PASSWORD is unset we fall back to the dev/sandbox open gate. Not a
+      // customer-JWT route. See admin.ts.
+      if (pathname === "/admin" && method === "GET") {
+        return new Response(adminHtml, {
+          headers: { "Content-Type": "text/html; charset=utf-8" },
+        });
+      }
+      if (pathname === "/admin/login" && method === "POST") return await adminLogin(req, env);
+      if (pathname === "/admin/overrides" && method === "GET") return await getOverrides(req, env);
       if (pathname === "/admin/overrides" && method === "PUT") return await putOverrides(req, env);
 
       // ---------- Authenticated ----------

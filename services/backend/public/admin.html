@@ -1,0 +1,566 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sandwich Factory — Menu Control Panel</title>
+<style>
+  :root {
+    --bg: #11131a;
+    --panel: #1a1d27;
+    --panel-2: #222634;
+    --line: #2c3142;
+    --text: #e7e9ef;
+    --muted: #9aa1b4;
+    --accent: #e0a64a;     /* warm gold */
+    --accent-ink: #1a1407;
+    --good: #3ecf6a;
+    --bad: #ef5350;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header.topbar {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 20px;
+    background: rgba(17,19,26,.92);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+  }
+  header.topbar h1 { font-size: 17px; margin: 0; font-weight: 650; letter-spacing: .2px; }
+  header.topbar .sub { color: var(--muted); font-size: 13px; }
+  header.topbar .spacer { flex: 1; }
+  .wrap { max-width: 940px; margin: 0 auto; padding: 20px; }
+
+  button {
+    font: inherit; cursor: pointer; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--text);
+    padding: 9px 14px; border-radius: 9px;
+  }
+  button:hover { border-color: #3a4159; }
+  button.primary {
+    background: var(--accent); color: var(--accent-ink);
+    border-color: var(--accent); font-weight: 650;
+  }
+  button.primary:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; }
+
+  input[type=text], input[type=password], input[type=number], select {
+    font: inherit; background: #0e1016; color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px;
+  }
+  input[type=number] { width: 76px; }
+  label.inline { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+  label.fld { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+
+  /* Login */
+  #login {
+    max-width: 380px; margin: 12vh auto; padding: 28px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  #login h2 { margin: 0 0 4px; }
+  #login p { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  #login input { width: 100%; margin-bottom: 12px; }
+  #login button { width: 100%; }
+
+  .hidden { display: none !important; }
+
+  /* Items */
+  .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; }
+  .toolbar input[type=text] { flex: 1; }
+  .cat { margin: 22px 0 8px; color: var(--accent); font-size: 13px; font-weight: 650;
+         text-transform: uppercase; letter-spacing: .8px; }
+
+  .item {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); margin-bottom: 10px; overflow: hidden;
+  }
+  .item.changed { border-color: var(--accent); }
+  .item-head {
+    display: flex; align-items: center; gap: 14px; padding: 12px 16px; cursor: pointer;
+  }
+  .item-head .name { font-weight: 600; }
+  .item-head .tags { display: flex; gap: 6px; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+  .tag.on { background: rgba(224,166,74,.16); border-color: var(--accent); color: var(--accent); }
+  .tag.bad { background: rgba(239,83,80,.16); border-color: var(--bad); color: var(--bad); }
+  .item-head .spacer { flex: 1; }
+  .chev { color: var(--muted); transition: transform .15s; }
+  .item.open .chev { transform: rotate(90deg); }
+
+  .item-body { display: none; padding: 4px 16px 16px; border-top: 1px solid var(--line); }
+  .item.open .item-body { display: block; }
+  .row { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; padding: 12px 0; }
+  .row + .row { border-top: 1px dashed var(--line); }
+
+  .group {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; margin-top: 10px;
+  }
+  .group .ghead { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+  .group .ghead .gname { font-weight: 600; }
+  .group .ghead .gid { color: var(--muted); font-size: 11px; }
+  .group .controls { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; }
+  .cond { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line);
+          display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  .cond.hidden { display: none; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .empty-groups { color: var(--muted); font-size: 13px; padding: 8px 0; }
+
+  /* Save bar */
+  #savebar {
+    position: sticky; bottom: 0; z-index: 20;
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 20px; background: rgba(17,19,26,.95);
+    backdrop-filter: blur(8px); border-top: 1px solid var(--line);
+  }
+  #savebar .spacer { flex: 1; }
+  .toast { font-size: 13px; }
+  .toast.ok { color: var(--good); }
+  .toast.err { color: var(--bad); }
+  .count { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN ============ -->
+<div id="login">
+  <h2>Menu Control Panel</h2>
+  <p>Sandwich Factory — sign in to manage your menu.</p>
+  <input id="pw" type="password" placeholder="Admin password" autocomplete="current-password" />
+  <button id="loginBtn" class="primary">Sign in</button>
+  <div id="loginMsg" class="toast err" style="margin-top:12px;"></div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app" class="hidden">
+  <header class="topbar">
+    <h1>Menu Control Panel</h1>
+    <span class="sub" id="env"></span>
+    <span class="spacer"></span>
+    <button id="reloadBtn" class="ghost">Reload</button>
+    <button id="logoutBtn" class="ghost">Sign out</button>
+  </header>
+
+  <div class="wrap">
+    <div class="toolbar">
+      <input id="filter" type="text" placeholder="Filter items by name…" />
+      <span class="count" id="count"></span>
+    </div>
+    <div id="list"></div>
+  </div>
+
+  <div id="savebar">
+    <span class="count" id="dirty">No unsaved changes</span>
+    <span class="spacer"></span>
+    <span class="toast" id="toast"></span>
+    <button id="saveBtn" class="primary" disabled>Save changes</button>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// API base = same origin the page is served from.
+const API = location.origin;
+const TOKEN_KEY = "sf_admin_token";
+
+let menu = null;         // { categories: [...] }
+let overrides = null;    // { items: {...}, deals: {...} }
+let allGroups = [];      // [{id, name}] every modifier group, for trigger pickers
+let dirty = false;
+
+// ---------- helpers ----------
+function token() { return localStorage.getItem(TOKEN_KEY); }
+function authHeaders() { return token() ? { Authorization: "Bearer " + token() } : {}; }
+function el(id) { return document.getElementById(id); }
+function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+  { "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;" }[c])); }
+
+function setDirty(v) {
+  dirty = v;
+  el("saveBtn").disabled = !v;
+  el("dirty").textContent = v ? "Unsaved changes" : "No unsaved changes";
+  if (v) { el("toast").textContent = ""; el("toast").className = "toast"; }
+}
+function toast(msg, kind) {
+  const t = el("toast");
+  t.textContent = msg; t.className = "toast " + (kind || "");
+}
+
+// ---------- auth ----------
+async function doLogin() {
+  const pw = el("pw").value;
+  el("loginMsg").textContent = "";
+  try {
+    const res = await fetch(API + "/admin/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (!res.ok) {
+      const e = await res.json().catch(() => null);
+      el("loginMsg").textContent = (e && e.error && e.error.message) || ("Login failed (" + res.status + ")");
+      return;
+    }
+    const data = await res.json();
+    localStorage.setItem(TOKEN_KEY, data.token);
+    await start();
+  } catch (err) {
+    el("loginMsg").textContent = "Cannot reach backend: " + err.message;
+  }
+}
+
+function logout() {
+  localStorage.removeItem(TOKEN_KEY);
+  el("app").classList.add("hidden");
+  el("login").classList.remove("hidden");
+  el("pw").value = "";
+}
+
+// ---------- load ----------
+async function loadAll() {
+  const [mRes, oRes] = await Promise.all([
+    fetch(API + "/menu"),
+    fetch(API + "/admin/overrides", { headers: authHeaders() }),
+  ]);
+  if (oRes.status === 401 || oRes.status === 403) { logout(); throw new Error("auth"); }
+  if (!mRes.ok) throw new Error("Failed to load menu (" + mRes.status + ")");
+  if (!oRes.ok) throw new Error("Failed to load overrides (" + oRes.status + ")");
+  menu = await mRes.json();
+  overrides = await oRes.json();
+  if (!overrides.items) overrides.items = {};
+  if (!overrides.deals) overrides.deals = {};
+
+  // Collect every modifier group across the menu for the trigger pickers.
+  const seen = new Map();
+  for (const cat of menu.categories || []) {
+    for (const it of cat.items || []) {
+      for (const g of it.modifierGroups || []) {
+        if (!seen.has(g.id)) seen.set(g.id, g.name);
+      }
+    }
+  }
+  allGroups = [...seen.entries()].map(([id, name]) => ({ id, name }));
+}
+
+// Get (or lazily create) the item override object in `overrides`.
+function itemOv(itemId) {
+  if (!overrides.items[itemId]) overrides.items[itemId] = { itemId };
+  return overrides.items[itemId];
+}
+function groupOv(itemId, groupId) {
+  const iv = itemOv(itemId);
+  if (!iv.groups) iv.groups = [];
+  let g = iv.groups.find(x => x.groupId === groupId);
+  if (!g) { g = { groupId }; iv.groups.push(g); }
+  return g;
+}
+function existingItemOv(itemId) { return overrides.items[itemId]; }
+function existingGroupOv(itemId, groupId) {
+  const iv = overrides.items[itemId];
+  return iv && iv.groups ? iv.groups.find(x => x.groupId === groupId) : undefined;
+}
+
+// ---------- render ----------
+function render() {
+  el("count").textContent = (menu.categories || []).reduce((n, c) => n + (c.items || []).length, 0) + " items";
+  el("env").textContent = menu.version ? ("menu " + String(menu.version).slice(0, 10)) : "";
+  const filter = el("filter").value.trim().toLowerCase();
+  const list = el("list");
+  list.innerHTML = "";
+
+  for (const cat of menu.categories || []) {
+    const items = (cat.items || []).filter(it => !filter || it.name.toLowerCase().includes(filter));
+    if (!items.length) continue;
+    const h = document.createElement("div");
+    h.className = "cat";
+    h.textContent = cat.name;
+    list.appendChild(h);
+    for (const it of items) list.appendChild(renderItem(it));
+  }
+}
+
+function badge(text, cls) {
+  return `<span class="tag ${cls || ""}">${esc(text)}</span>`;
+}
+
+function renderItem(item) {
+  const iv = existingItemOv(item.id);
+  const card = document.createElement("div");
+  card.className = "item";
+
+  const tags = [];
+  if (iv && iv.hidden) tags.push(badge("Hidden", "bad"));
+  if (iv && iv.soldOut) tags.push(badge("Sold out", "bad"));
+  if (iv && iv.prepTimeMinutes) tags.push(badge(iv.prepTimeMinutes + " min", "on"));
+
+  card.innerHTML = `
+    <div class="item-head">
+      <span class="chev">▶</span>
+      <span class="name">${esc(item.name)}</span>
+      <span class="tags">${tags.join("")}</span>
+      <span class="spacer"></span>
+      <span class="muted">${(item.modifierGroups || []).length} groups</span>
+    </div>
+    <div class="item-body"></div>`;
+
+  card.querySelector(".item-head").addEventListener("click", () => {
+    card.classList.toggle("open");
+    if (card.classList.contains("open") && !card.querySelector(".item-body").dataset.built) {
+      buildBody(card, item);
+    }
+  });
+  return card;
+}
+
+function buildBody(card, item) {
+  const body = card.querySelector(".item-body");
+  body.dataset.built = "1";
+
+  // --- item-level controls ---
+  const iv = existingItemOv(item.id) || {};
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `
+    <label class="inline"><input type="checkbox" class="ck-hidden"> Hidden from menu</label>
+    <label class="inline"><input type="checkbox" class="ck-soldout"> Sold out today</label>
+    <label class="fld">Prep time (min)
+      <input type="number" class="in-prep" min="0" max="240" placeholder="—">
+    </label>`;
+  body.appendChild(row);
+
+  const ckHidden = row.querySelector(".ck-hidden");
+  const ckSold = row.querySelector(".ck-soldout");
+  const inPrep = row.querySelector(".in-prep");
+  ckHidden.checked = !!iv.hidden;
+  ckSold.checked = !!iv.soldOut;
+  if (iv.prepTimeMinutes != null) inPrep.value = iv.prepTimeMinutes;
+
+  ckHidden.addEventListener("change", () => { itemOv(item.id).hidden = ckHidden.checked; touch(card, item); });
+  ckSold.addEventListener("change", () => { itemOv(item.id).soldOut = ckSold.checked; touch(card, item); });
+  inPrep.addEventListener("input", () => {
+    const v = inPrep.value === "" ? undefined : Math.max(0, parseInt(inPrep.value, 10) || 0);
+    itemOv(item.id).prepTimeMinutes = v;
+    touch(card, item);
+  });
+
+  // --- per-group controls ---
+  const groups = item.modifierGroups || [];
+  if (!groups.length) {
+    const e = document.createElement("div");
+    e.className = "empty-groups";
+    e.textContent = "No modifier groups on this item.";
+    body.appendChild(e);
+  }
+  for (const g of groups) body.appendChild(buildGroup(item, g));
+}
+
+function buildGroup(item, group) {
+  const gv = existingGroupOv(item.id, group.id) || {};
+  const wrap = document.createElement("div");
+  wrap.className = "group";
+
+  const triggerOpts = allGroups
+    .filter(x => x.id !== group.id)
+    .map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`)
+    .join("");
+  const modOpts = (function () {
+    // modifiers across all OTHER groups, so the owner can pick a specific trigger modifier
+    const opts = [];
+    for (const cat of menu.categories || []) {
+      for (const it of cat.items || []) {
+        for (const gg of it.modifierGroups || []) {
+          if (gg.id === group.id) continue;
+          for (const m of gg.modifiers || []) {
+            opts.push(`<option value="${esc(m.id)}">${esc(gg.name)} › ${esc(m.name)}</option>`);
+          }
+        }
+      }
+    }
+    // de-dup by value
+    const seen = new Set(); const out = [];
+    for (const o of opts) { const v = o.match(/value="([^"]*)"/)[1]; if (!seen.has(v)) { seen.add(v); out.push(o); } }
+    return out.join("");
+  })();
+
+  wrap.innerHTML = `
+    <div class="ghead">
+      <span class="gname">${esc(group.name)}</span>
+      <span class="gid">${esc(group.id)}</span>
+      <span class="muted">Square: min ${group.minSelections}, max ${group.maxSelections}</span>
+    </div>
+    <div class="controls">
+      <label class="fld">Requirement
+        <select class="sel-req">
+          <option value="">Use Square</option>
+          <option value="required">Required</option>
+          <option value="optional">Optional</option>
+        </select>
+      </label>
+      <label class="fld">Min<input type="number" class="in-min" min="0" placeholder="${group.minSelections}"></label>
+      <label class="fld">Max<input type="number" class="in-max" min="0" placeholder="${group.maxSelections}"></label>
+      <label class="inline"><input type="checkbox" class="ck-cond"> Conditional (hidden until triggered)</label>
+    </div>
+    <div class="cond hidden">
+      <label class="fld">Reveal when ANY selection in group
+        <select class="sel-tgroup"><option value="">— none —</option>${triggerOpts}</select>
+      </label>
+      <label class="fld">…or this specific modifier is chosen
+        <select class="sel-tmod"><option value="">— none —</option>${modOpts}</select>
+      </label>
+    </div>`;
+
+  const selReq = wrap.querySelector(".sel-req");
+  const inMin = wrap.querySelector(".in-min");
+  const inMax = wrap.querySelector(".in-max");
+  const ckCond = wrap.querySelector(".ck-cond");
+  const condBox = wrap.querySelector(".cond");
+  const selTg = wrap.querySelector(".sel-tgroup");
+  const selTm = wrap.querySelector(".sel-tmod");
+
+  // hydrate from existing override
+  if (gv.required === true) selReq.value = "required";
+  else if (gv.required === false) selReq.value = "optional";
+  if (gv.minSelections != null) inMin.value = gv.minSelections;
+  if (gv.maxSelections != null) inMax.value = gv.maxSelections;
+  if (gv.conditional) {
+    ckCond.checked = true; condBox.classList.remove("hidden");
+    if (gv.conditional.triggerGroupIds && gv.conditional.triggerGroupIds[0]) selTg.value = gv.conditional.triggerGroupIds[0];
+    if (gv.conditional.triggerModifierIds && gv.conditional.triggerModifierIds[0]) selTm.value = gv.conditional.triggerModifierIds[0];
+  }
+
+  function writeGroup() {
+    const g = groupOv(item.id, group.id);
+    // requirement
+    if (selReq.value === "required") g.required = true;
+    else if (selReq.value === "optional") g.required = false;
+    else delete g.required;
+    // min/max
+    g.minSelections = inMin.value === "" ? undefined : Math.max(0, parseInt(inMin.value, 10) || 0);
+    g.maxSelections = inMax.value === "" ? undefined : Math.max(0, parseInt(inMax.value, 10) || 0);
+    if (g.minSelections == null) delete g.minSelections;
+    if (g.maxSelections == null) delete g.maxSelections;
+    // conditional
+    if (ckCond.checked) {
+      const cond = { hiddenUntilTriggered: true };
+      if (selTg.value) cond.triggerGroupIds = [selTg.value];
+      if (selTm.value) cond.triggerModifierIds = [selTm.value];
+      g.conditional = cond;
+    } else {
+      delete g.conditional;
+    }
+    touch(null, item);
+  }
+
+  selReq.addEventListener("change", writeGroup);
+  inMin.addEventListener("input", writeGroup);
+  inMax.addEventListener("input", writeGroup);
+  selTg.addEventListener("change", writeGroup);
+  selTm.addEventListener("change", writeGroup);
+  ckCond.addEventListener("change", () => {
+    condBox.classList.toggle("hidden", !ckCond.checked);
+    writeGroup();
+  });
+
+  return wrap;
+}
+
+// Mark dirty + refresh the item card's tag badges.
+function touch(card, item) {
+  setDirty(true);
+  if (card) {
+    const iv = existingItemOv(item.id) || {};
+    const tags = [];
+    if (iv.hidden) tags.push(badge("Hidden", "bad"));
+    if (iv.soldOut) tags.push(badge("Sold out", "bad"));
+    if (iv.prepTimeMinutes) tags.push(badge(iv.prepTimeMinutes + " min", "on"));
+    card.querySelector(".tags").innerHTML = tags.join("");
+    card.classList.add("changed");
+  }
+}
+
+// Strip empty override objects so we PUT a clean document.
+function cleanOverrides() {
+  const items = {};
+  for (const [id, iv] of Object.entries(overrides.items)) {
+    const groups = (iv.groups || []).filter(g => {
+      const meaningful = g.required != null || g.minSelections != null || g.maxSelections != null || g.conditional;
+      return meaningful;
+    });
+    const hasItemRule = iv.hidden || iv.soldOut || (iv.prepTimeMinutes != null) || groups.length;
+    if (!hasItemRule) continue;
+    const out = { itemId: id };
+    if (iv.hidden) out.hidden = true;
+    if (iv.soldOut) out.soldOut = true;
+    if (iv.prepTimeMinutes != null) out.prepTimeMinutes = iv.prepTimeMinutes;
+    if (groups.length) out.groups = groups;
+    items[id] = out;
+  }
+  return { items, deals: overrides.deals || {} };
+}
+
+async function save() {
+  const payload = cleanOverrides();
+  el("saveBtn").disabled = true;
+  try {
+    const res = await fetch(API + "/admin/overrides", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify(payload),
+    });
+    if (res.status === 401 || res.status === 403) { logout(); return; }
+    if (!res.ok) {
+      const e = await res.json().catch(() => null);
+      toast((e && e.error && e.error.message) || ("Save failed (" + res.status + ")"), "err");
+      el("saveBtn").disabled = false;
+      return;
+    }
+    overrides = await res.json();
+    if (!overrides.items) overrides.items = {};
+    if (!overrides.deals) overrides.deals = {};
+    setDirty(false);
+    toast("Saved ✓", "ok");
+    // collapse + rebuild so cards reflect the cleaned, saved state
+    document.querySelectorAll(".item").forEach(c => c.classList.remove("changed"));
+  } catch (err) {
+    toast("Save error: " + err.message, "err");
+    el("saveBtn").disabled = false;
+  }
+}
+
+// ---------- boot ----------
+async function start() {
+  el("login").classList.add("hidden");
+  el("app").classList.remove("hidden");
+  try {
+    await loadAll();
+    render();
+    setDirty(false);
+  } catch (err) {
+    if (err.message !== "auth") { toast("Load failed: " + err.message, "err"); }
+  }
+}
+
+el("loginBtn").addEventListener("click", doLogin);
+el("pw").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+el("logoutBtn").addEventListener("click", logout);
+el("reloadBtn").addEventListener("click", async () => {
+  if (dirty && !confirm("Discard unsaved changes and reload?")) return;
+  await start();
+});
+el("saveBtn").addEventListener("click", save);
+el("filter").addEventListener("input", render);
+window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+// auto-resume if we already have a token
+if (token()) { start(); }
+</script>
+</body>
+</html>

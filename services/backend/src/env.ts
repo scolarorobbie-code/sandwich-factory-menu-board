@@ -11,6 +11,12 @@ export interface Env {
   SQUARE_WEBHOOK_SIGNATURE_KEY?: string;
   JWT_SIGNING_SECRET?: string;
 
+  // Merchant control-panel password (secret). Set via
+  // `wrangler secret put ADMIN_PASSWORD`. When unset, admin endpoints fall back
+  // to the dev/sandbox open gate so local dev still works without a password.
+  // In production it MUST be set, or the admin panel stays disabled.
+  ADMIN_PASSWORD?: string;
+
   // KV namespace for idempotency keys + webhook event de-dupe (optional in dev)
   IDEMPOTENCY?: KVNamespace;
 }

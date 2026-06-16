@@ -7,3 +7,8 @@ SQUARE_WEBHOOK_SIGNATURE_KEY=
 
 # Used to sign customer login tokens. Any long random string for local dev.
 JWT_SIGNING_SECRET=dev-only-change-me
+
+# Password for the merchant control panel (GET /admin). Leave blank locally to
+# keep the panel open with no password in sandbox/dev. Set a strong value in
+# production via `wrangler secret put ADMIN_PASSWORD` (NEVER commit the real one).
+ADMIN_PASSWORD=

@@ -13,5 +13,5 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "../../contract/types.ts"]
+  "include": ["src/**/*.ts", "src/**/*.d.ts", "../../contract/types.ts"]
 }
