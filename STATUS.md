@@ -26,6 +26,33 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   "Choose Your Drink" set in the sandbox via a one-off script.
 - **Full ordering loop** (auth, cart, order, payment, status, loyalty/deals/
   favorites, webhook verify+dedupe) works on mock + sandbox; backend tested.
+- **Square catalog pagination FIXED** — `fetchLiveMenu` now follows the cursor.
+  Before, anything past page 1 (200+ objects) was silently dropped, which hid
+  combo drink lists. This was the real cause of the "drink picker missing" bug.
+- **`add-drink-set` script** (`npm run add-drink-set`) — attaches a "Choose Your
+  Drink" modifier list to EVERY combo item in the sandbox. Idempotent, committed.
+
+## Landed in the parallel-agent build pass (2026-06-14, all merged + typechecks green)
+- **Real Square Loyalty (Stars)** — backend `loyalty.ts`: earn on payment +
+  redeem rewards via the Loyalty API, Square as source of truth. Fails soft if no
+  loyalty program exists. Mock keeps local 50-Stars=$5 so it still demos.
+- **Mobile loyalty UI** — phone field at sign-up (optional, for Stars mapping) +
+  "Use N Stars · save $X" redeem control at checkout that recomputes the total.
+- **Merchant control panel — backend + dashboard** — override layer (`overrides.ts`,
+  applied in `menu.ts`): per-group required/min/max + conditional rules, per-item
+  hidden/sold-out + prep time. Admin auth (`POST /admin/login`, `ADMIN_PASSWORD`
+  secret, 8h admin JWT). **Web dashboard served at `GET /admin`** (`public/admin.html`).
+- **One-tap reorder** — order-history rows re-add their items to the cart (resolves
+  historical names against the live menu; skips items that no longer exist).
+- **Saved favorites** — heart on ItemDetail saves a build; Favorites section in
+  Account with one-tap add. Uses existing favorites endpoints.
+- **Premium polish** — skeleton loaders (replace bare spinners) + haptics
+  (`expo-haptics`, lazy + crash-proof). ⚠️ Owner must `npm install` for haptics.
+- **Strategy docs (read these):** `docs/COMPETITIVE_ANALYSIS.md` (franchise-app
+  teardown + prioritized punch-list) and `docs/WEB_SOCIAL_AUDIT.md` (website +
+  social audit — note: the current website's ordering is Orda-built and dies when
+  he leaves Orda; the app becomes the ordering path).
+- **Control panel design + remaining work:** `docs/CONTROL_PANEL.md`.
 
 ## Decisions (owner-confirmed)
 - Photos: real Square + AI fallback. Brand: **match website** (awaiting his logo +
@@ -37,12 +64,20 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   modifiers, hide items, prep time, deals). Tracked in CLAUDE.md.
 
 ## Next steps (in priority order)
-1. **Run a real end-to-end test order** — the full flow is built and ready.
+1. **Verify combos in the sim** — after pulling latest: `npm run add-drink-set`,
+   restart backend, ⌘R. Pick a combo → "Choose Your Drink" should appear.
+2. **`npm install`** on his Mac — needed for the new `expo-haptics` dependency.
+3. **Run a real end-to-end test order** — the full flow is built and ready.
    See the test protocol below.
-2. **Branding** — once he sends his logo: extract colors, apply theme, add logo to
-   header + splash. (Blocked on the logo image.)
-3. **Wire Square Loyalty** (real Stars earn/redeem via Loyalty API).
-4. **Merchant control panel** (deferred but owner wants it).
+4. **Branding** — STILL BLOCKED: need his logo (PNG/vector) + brand colors +
+   storefront/food photos. Then: extract colors, apply theme, logo in header + splash.
+5. **Control panel — finish:** KV/D1 persistence (overrides reset on restart today),
+   mobile reading `__conditional` overrides to retire the regex heuristic, prep
+   time → Square `pickup_at` in order creation. See `docs/CONTROL_PANEL.md`.
+6. **Loyalty — to actually test Stars:** sandbox needs an ACTIVE loyalty program
+   configured; loyalty maps by phone (now captured at sign-up).
+7. **Work the competitive punch-list** in `docs/COMPETITIVE_ANALYSIS.md` (push
+   notifications wiring is the next big one — backend already supports it).
 
 ## Test order protocol (Phase 1 verification)
 Do this to prove the real square loop works:
