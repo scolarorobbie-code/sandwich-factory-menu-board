@@ -3,7 +3,6 @@ import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   Image,
   Pressable,
@@ -13,6 +12,7 @@ import {
   View,
 } from "react-native";
 import { api } from "../api/client";
+import { MenuSkeleton } from "../components/Skeleton";
 import { useCart } from "../state/cart";
 import { colors } from "../theme";
 import type { RootStackParamList } from "../navigation/types";
@@ -86,8 +86,8 @@ export default function MenuScreen() {
   }
   if (!menu) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.accent} />
+      <View style={styles.screen}>
+        <MenuSkeleton />
       </View>
     );
   }

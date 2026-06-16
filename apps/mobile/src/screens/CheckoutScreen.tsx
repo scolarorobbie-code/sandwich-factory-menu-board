@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from "react-native";
 import { api } from "../api/client";
 import { Button } from "../components/Button";
+import * as haptics from "../haptics";
 import { useCart } from "../state/cart";
 import { colors, money } from "../theme";
 import type { RootStackParamList } from "../navigation/types";
@@ -85,9 +86,11 @@ export default function CheckoutScreen({ navigation }: Props) {
     setError(null);
     try {
       const res = await api.pay(order.id, TEST_CARD_NONCE);
+      haptics.success();
       cart.clear();
       navigation.replace("OrderStatus", { orderId: res.order.id });
     } catch (e) {
+      haptics.warning();
       setError(e instanceof Error ? e.message : "Payment failed");
       setPaying(false);
     }

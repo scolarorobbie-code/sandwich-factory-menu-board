@@ -1,8 +1,11 @@
 import type { Modifier, ModifierGroup } from "@sf/contract";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
-import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { api } from "../api/client";
 import { Button } from "../components/Button";
+import * as haptics from "../haptics";
+import { useAuth } from "../state/auth";
 import { useCart } from "../state/cart";
 import { colors, dollars } from "../theme";
 import type { RootStackParamList } from "../navigation/types";
@@ -19,6 +22,8 @@ const isComboTrigger = (name: string) =>
 export default function ItemDetailScreen({ route, navigation }: Props) {
   const { item } = route.params;
   const cart = useCart();
+  const { customer } = useAuth();
+  const [saving, setSaving] = useState(false);
 
   const [variationId, setVariationId] = useState(item.variations[0]?.id);
   const [selected, setSelected] = useState<Set<string>>(
@@ -40,6 +45,7 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
   }
 
   function toggle(group: ModifierGroup, mod: Modifier) {
+    haptics.selection();
     setSelected((prev) => {
       const next = new Set(prev);
       const groupIds = group.modifiers.map((m) => m.id);
@@ -90,8 +96,57 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
   }
 
   function addToCart() {
+    haptics.tapMedium();
     cart.add(item, variation, chosenMods, quantity, note.trim() || undefined);
     navigation.goBack();
+  }
+
+  async function persistFavorite(label: string) {
+    setSaving(true);
+    try {
+      await api.createFavorite({
+        name: label.trim() || item.name,
+        lineItems: [
+          {
+            itemId: item.id,
+            variationId: variation.id,
+            quantity,
+            modifierIds: chosenMods.map((m) => m.id),
+            note: note.trim() || undefined,
+          },
+        ],
+      });
+      haptics.success();
+      Alert.alert("Saved", `"${label.trim() || item.name}" is in your favorites.`);
+    } catch (e) {
+      haptics.warning();
+      Alert.alert("Couldn't save", e instanceof Error ? e.message : "Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Save this exact build as a favorite ("My usual") so it can be re-added in
+  // one tap from Account → Favorites. Signed-in only.
+  function saveFavorite() {
+    if (missing.length) {
+      haptics.warning();
+      Alert.alert("Finish your build", `Choose ${missing[0].name} before saving.`);
+      return;
+    }
+    haptics.tapLight();
+    // Alert.prompt is iOS-only; on Android save straight away with a sensible name.
+    if (typeof Alert.prompt === "function") {
+      Alert.prompt(
+        "Save as favorite",
+        'Give this build a name (e.g. "My usual").',
+        (name) => persistFavorite(name ?? item.name),
+        "plain-text",
+        item.name,
+      );
+    } else {
+      persistFavorite(item.name);
+    }
   }
 
   return (
@@ -173,11 +228,25 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
       </ScrollView>
 
       <View style={styles.footer}>
-        <Button
-          title={missing.length ? `Choose ${missing[0].name}` : `Add ${quantity} · ${dollars(unit * quantity)}`}
-          onPress={addToCart}
-          disabled={missing.length > 0}
-        />
+        <View style={styles.footerRow}>
+          {customer ? (
+            <Pressable
+              style={[styles.heartBtn, saving && { opacity: 0.5 }]}
+              onPress={saveFavorite}
+              disabled={saving}
+              accessibilityLabel="Save as favorite"
+            >
+              <Text style={styles.heartIcon}>♡</Text>
+            </Pressable>
+          ) : null}
+          <View style={{ flex: 1 }}>
+            <Button
+              title={missing.length ? `Choose ${missing[0].name}` : `Add ${quantity} · ${dollars(unit * quantity)}`}
+              onPress={addToCart}
+              disabled={missing.length > 0}
+            />
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -271,4 +340,15 @@ const styles = StyleSheet.create({
   stepBtnText: { color: colors.text, fontSize: 22, fontWeight: "800" },
   qty: { color: colors.text, fontSize: 20, fontWeight: "800", minWidth: 24, textAlign: "center" },
   footer: { padding: 16, borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.bg2 },
+  footerRow: { flexDirection: "row", alignItems: "stretch", gap: 12 },
+  heartBtn: {
+    width: 54,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
+  heartIcon: { color: colors.accent, fontSize: 26, fontWeight: "800" },
 });

@@ -1,6 +1,7 @@
 import type {
   AuthResponse,
   AuthTokens,
+  CreateFavoriteRequest,
   CreateOrderRequest,
   CreateOrderResponse,
   CreatePaymentResponse,
@@ -92,6 +93,10 @@ export const api = {
 
   loyalty: () => request<Loyalty>("GET", "/loyalty", { auth: true }),
   favorites: () => request<Favorite[]>("GET", "/favorites", { auth: true }),
+  createFavorite: (body: CreateFavoriteRequest) =>
+    request<Favorite>("POST", "/favorites", { body, auth: true }),
+  deleteFavorite: (id: string) =>
+    request<void>("DELETE", `/favorites/${id}`, { auth: true }),
   registerDevice: (expoPushToken: string, platform: "ios" | "android") =>
     request<void>("POST", "/devices", { body: { expoPushToken, platform }, auth: true }),
 };

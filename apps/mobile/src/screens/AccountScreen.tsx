@@ -1,27 +1,105 @@
-import type { Loyalty, Order } from "@sf/contract";
+import type { CartLineItem, Favorite, Loyalty, Menu, Order } from "@sf/contract";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { api } from "../api/client";
 import { Button } from "../components/Button";
+import * as haptics from "../haptics";
+import { planReorder } from "../reorder";
 import { useAuth } from "../state/auth";
+import { useCart } from "../state/cart";
 import { colors, money } from "../theme";
 import type { RootStackParamList } from "../navigation/types";
 
 export default function AccountScreen() {
   const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { customer, signOut } = useAuth();
+  const cart = useCart();
   const [loyalty, setLoyalty] = useState<Loyalty | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [menu, setMenu] = useState<Menu | null>(null);
+  // Order id currently being re-added, for inline disabled feedback.
+  const [busy, setBusy] = useState<string | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       if (!customer) return;
       api.loyalty().then(setLoyalty).catch(() => {});
       api.orderHistory().then((p) => setOrders(p.items)).catch(() => {});
+      api.favorites().then(setFavorites).catch(() => {});
+      // Menu is needed to resolve reorders/favorites against today's catalog.
+      api.menu().then(setMenu).catch(() => {});
     }, [customer]),
   );
+
+  // Add resolved line items to the cart, warn about anything no longer available,
+  // then route to the cart. Shared by Reorder and favorites.
+  function addAndGoToCart(lineItems: CartLineItem[], skipped: number, emptyMessage: string) {
+    if (!menu) {
+      Alert.alert("One moment", "Still loading the menu — try again in a second.");
+      return;
+    }
+    const res = cart.addLineItems(menu, lineItems);
+    if (res.added === 0) {
+      haptics.warning();
+      Alert.alert("Unavailable", emptyMessage);
+      return;
+    }
+    haptics.success();
+    const dropped = skipped + res.skipped;
+    if (dropped > 0) {
+      Alert.alert(
+        "Added to cart",
+        `${res.added} item${res.added === 1 ? "" : "s"} added. ${dropped} item${dropped === 1 ? "" : "s"} couldn't be re-added (no longer on the menu).`,
+      );
+    }
+    nav.navigate("Cart");
+  }
+
+  function reorder(order: Order) {
+    if (!menu) {
+      Alert.alert("One moment", "Still loading the menu — try again in a second.");
+      return;
+    }
+    haptics.tapMedium();
+    setBusy(order.id);
+    const plan = planReorder(menu, order);
+    setBusy(null);
+    addAndGoToCart(
+      plan.lineItems,
+      plan.skipped,
+      "None of the items from this order are available right now.",
+    );
+  }
+
+  function addFavorite(fav: Favorite) {
+    haptics.tapMedium();
+    addAndGoToCart(fav.lineItems, 0, `"${fav.name}" isn't available right now.`);
+  }
+
+  function removeFavorite(fav: Favorite) {
+    Alert.alert("Remove favorite", `Remove "${fav.name}" from your favorites?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          // Optimistic removal; restore on failure.
+          setFavorites((prev) => prev.filter((f) => f.id !== fav.id));
+          try {
+            await api.deleteFavorite(fav.id);
+            haptics.tapLight();
+          } catch {
+            setFavorites((prev) => [...prev, fav]);
+            haptics.warning();
+            Alert.alert("Couldn't remove", "Please try again.");
+          }
+        },
+      },
+    ]);
+  }
 
   if (!customer) {
     return (
@@ -33,6 +111,8 @@ export default function AccountScreen() {
       </View>
     );
   }
+
+  const favCount = (f: Favorite) => f.lineItems.reduce((s, l) => s + l.quantity, 0);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
@@ -49,20 +129,54 @@ export default function AccountScreen() {
         ) : null}
       </View>
 
+      <Text style={styles.section}>Your favorites</Text>
+      {favorites.length === 0 ? (
+        <Text style={styles.muted}>No favorites yet — save your usual from any item to reorder it in one tap.</Text>
+      ) : (
+        favorites.map((f) => (
+          <View key={f.id} style={styles.favorite}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.favName}>{f.name}</Text>
+              <Text style={styles.muted}>
+                {favCount(f)} item{favCount(f) === 1 ? "" : "s"}
+              </Text>
+              <Pressable onPress={() => removeFavorite(f)} hitSlop={8}>
+                <Text style={styles.remove}>Remove</Text>
+              </Pressable>
+            </View>
+            <Pressable style={styles.addBtn} onPress={() => addFavorite(f)}>
+              <Text style={styles.addBtnText}>Add to cart</Text>
+            </Pressable>
+          </View>
+        ))
+      )}
+
       <Text style={styles.section}>Order history</Text>
       {orders.length === 0 ? (
         <Text style={styles.muted}>No orders yet.</Text>
       ) : (
         orders.map((o) => (
-          <Pressable key={o.id} style={styles.order} onPress={() => nav.navigate("OrderStatus", { orderId: o.id })}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.orderNum}>Order #{o.displayNumber}</Text>
-              <Text style={styles.muted}>
-                {o.status} · {new Date(o.createdAt).toLocaleDateString()}
-              </Text>
-            </View>
-            <Text style={styles.orderTotal}>{money(o.total)}</Text>
-          </Pressable>
+          <View key={o.id} style={styles.order}>
+            <Pressable style={styles.orderTop} onPress={() => nav.navigate("OrderStatus", { orderId: o.id })}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.orderNum}>Order #{o.displayNumber}</Text>
+                <Text style={styles.muted} numberOfLines={1}>
+                  {o.lineItems.map((l) => `${l.quantity}× ${l.name}`).join(", ")}
+                </Text>
+                <Text style={styles.muted}>
+                  {o.status} · {new Date(o.createdAt).toLocaleDateString()}
+                </Text>
+              </View>
+              <Text style={styles.orderTotal}>{money(o.total)}</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.reorderBtn, busy === o.id && { opacity: 0.6 }]}
+              onPress={() => reorder(o)}
+              disabled={busy === o.id}
+            >
+              <Text style={styles.reorderText}>↻ Reorder</Text>
+            </Pressable>
+          </View>
         ))
       )}
 
@@ -84,7 +198,17 @@ const styles = StyleSheet.create({
   earnRule: { color: colors.muted, fontSize: 14, marginTop: 8 },
   reward: { color: colors.cyan, fontSize: 14, marginTop: 6 },
   section: { color: colors.accent2, fontSize: 20, fontWeight: "800", marginTop: 28, marginBottom: 12 },
-  order: { flexDirection: "row", alignItems: "center", backgroundColor: colors.card, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.line },
+
+  favorite: { flexDirection: "row", alignItems: "center", backgroundColor: colors.card, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.line },
+  favName: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  addBtn: { backgroundColor: colors.accent2, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 10, marginLeft: 12 },
+  addBtnText: { color: "#1a1410", fontSize: 14, fontWeight: "800" },
+  remove: { color: colors.accent, fontSize: 13, marginTop: 8, fontWeight: "600" },
+
+  order: { backgroundColor: colors.card, borderRadius: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.line, overflow: "hidden" },
+  orderTop: { flexDirection: "row", alignItems: "center", padding: 16 },
   orderNum: { color: colors.text, fontSize: 16, fontWeight: "700" },
-  orderTotal: { color: colors.accent2, fontSize: 16, fontWeight: "800" },
+  orderTotal: { color: colors.accent2, fontSize: 16, fontWeight: "800", marginLeft: 12 },
+  reorderBtn: { borderTopWidth: 1, borderTopColor: colors.line, paddingVertical: 12, alignItems: "center", backgroundColor: colors.bg2 },
+  reorderText: { color: colors.accent2, fontSize: 15, fontWeight: "800" },
 });
