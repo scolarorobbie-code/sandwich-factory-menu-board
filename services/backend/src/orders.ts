@@ -10,9 +10,15 @@ import type {
 } from "@sf/contract";
 import type { Env } from "./env";
 import { isLive } from "./env";
+import {
+  findOrCreateLoyaltyAccount,
+  getAccountBalance,
+  getLoyaltyProgram,
+  redeemReward,
+} from "./loyalty";
 import { getDeals, getMenu } from "./menu";
 import { error, json } from "./responses";
-import { createSquareOrder, type SquareLineItem } from "./square";
+import { createSquareOrder, retrieveSquareOrder, type SquareLineItem } from "./square";
 import { nextDisplayNumber, store, type StoredUser } from "./store";
 
 // Murfreesboro, TN combined sales tax. Mock-mode only — in production Square's
@@ -80,13 +86,15 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
 
   const subtotal = lineItems.reduce((s, l) => s + l.total.amount, 0);
 
-  // Discounts: app-exclusive deal codes + Stars redemption (50 Stars = $5).
+  // Mock-mode discounts: app-exclusive deal codes + Stars redemption (50=$5).
+  // In LIVE mode Square computes all totals authoritatively, and Stars are
+  // redeemed as a real Square Loyalty reward below (these locals are ignored).
   let discount = 0;
   if (body.dealId) {
     const deal = getDeals().find((d) => d.id === body.dealId);
     if (deal?.id === "deal-free-cookie" && subtotal >= 1500) discount += 249;
   }
-  if (body.redeemStars && body.redeemStars > 0) {
+  if (!isLive(env) && body.redeemStars && body.redeemStars > 0) {
     const redeemable = Math.min(body.redeemStars, user.stars);
     const blocks = Math.floor(redeemable / 50);
     discount += blocks * 500;
@@ -111,10 +119,26 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
       }));
       const idempotencyKey = req.headers.get("Idempotency-Key") ?? crypto.randomUUID();
       const name = [user.customer.firstName, user.customer.lastName].filter(Boolean).join(" ");
-      // NOTE: app-level Stars/deal discounts are applied as ad-hoc Square
-      // discounts in a later pass; for now Square's catalog totals are source.
-      const sq = await createSquareOrder(env, sqLines, idempotencyKey, name, body.pickupNote);
+      // NOTE: app-level deal discounts are applied as ad-hoc Square discounts in
+      // a later pass; for now Square's catalog totals are source.
+      let sq = await createSquareOrder(env, sqLines, idempotencyKey, name, body.pickupNote);
       squareOrderId = sq.squareOrderId;
+
+      // Stars redemption: in LIVE mode this is a real Square Loyalty reward, so
+      // the discount/total come straight from Square (never our own 50=$5 math).
+      // Best-effort — if the merchant has no loyalty program, the customer has no
+      // account, or no tier is affordable, we skip redeeming and keep the order.
+      if (body.redeemStars && body.redeemStars > 0) {
+        const applied = await applyLoyaltyRedemption(
+          env,
+          user,
+          squareOrderId,
+          idempotencyKey,
+          body.redeemStars,
+        );
+        if (applied) sq = await retrieveSquareOrder(env, squareOrderId);
+      }
+
       subtotalM = sq.subtotal;
       taxM = sq.tax;
       discountM = sq.discount;
@@ -157,4 +181,53 @@ export function getOrder(orderId: string, user: StoredUser): Response {
 
 export function listOrders(user: StoredUser): Response {
   return json({ items: store.listOrders(user.customer.id) });
+}
+
+/**
+ * LIVE-mode Stars redemption via the real Square Loyalty API. Resolves the
+ * customer's loyalty account (by phone), picks the most valuable reward tier
+ * the customer can afford with both their balance and the `redeemStars` they
+ * chose, and attaches that reward to the Square order — Square then recomputes
+ * the order's discount/total authoritatively.
+ *
+ * Returns true when a reward was applied. Fully best-effort: no program, no
+ * account, or no affordable tier → returns false and the order proceeds with no
+ * redemption (never throws, never blocks the order).
+ */
+async function applyLoyaltyRedemption(
+  env: Env,
+  user: StoredUser,
+  squareOrderId: string,
+  idempotencyKey: string,
+  redeemCap: number,
+): Promise<boolean> {
+  try {
+    const program = await getLoyaltyProgram(env);
+    if (!program || program.rewards.length === 0) return false;
+
+    const accountId =
+      user.loyaltyAccountId ??
+      (await findOrCreateLoyaltyAccount(env, program.programId, user.customer.phone)) ??
+      undefined;
+    if (!accountId) return false;
+    if (user.loyaltyAccountId !== accountId) {
+      user.loyaltyAccountId = accountId;
+      store.putUser(user);
+    }
+
+    const balance = (await getAccountBalance(env, accountId)) ?? 0;
+    if (balance <= 0) return false;
+
+    // Affordable tiers: cost <= live balance AND <= what the customer chose to
+    // spend (`redeemCap`). Pick the highest-cost tier that fits.
+    const tier = program.rewards
+      .filter((r) => r.cost > 0 && r.cost <= balance && r.cost <= redeemCap)
+      .sort((a, b) => b.cost - a.cost)[0];
+    if (!tier) return false;
+
+    const result = await redeemReward(env, accountId, tier.id, squareOrderId, `redeem-${idempotencyKey}`);
+    return result !== null;
+  } catch {
+    return false;
+  }
 }

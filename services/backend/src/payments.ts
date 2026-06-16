@@ -1,9 +1,53 @@
 import type { CreatePaymentRequest, CreatePaymentResponse, Order } from "@sf/contract";
 import { isLive, type Env } from "./env";
+import { accumulatePoints, findOrCreateLoyaltyAccount, getLoyaltyProgram } from "./loyalty";
 import { notifyCustomerStatus, notifyStaffNewOrder } from "./push";
 import { error, json } from "./responses";
 import { squareFetch } from "./square";
 import { store, type StoredUser } from "./store";
+
+/**
+ * LIVE-mode loyalty earn. Square calculates the points from its own accrual
+ * rules tied to the paid order; we just resolve the customer's loyalty account
+ * (by phone) and trigger accumulation. Fully best-effort: a missing loyalty
+ * program, a customer with no phone, or any Square hiccup must NEVER fail a
+ * completed payment — we just skip earning. Square stays the source of truth, so
+ * we mirror the accrued points onto `user.stars` only for display.
+ */
+async function earnLoyalty(
+  env: Env,
+  user: StoredUser,
+  squareOrderId: string,
+  idempotencyKey: string,
+  paid: Order,
+): Promise<void> {
+  try {
+    const program = await getLoyaltyProgram(env);
+    if (!program) return; // no Square loyalty program configured → no earning
+
+    const accountId =
+      user.loyaltyAccountId ??
+      (await findOrCreateLoyaltyAccount(env, program.programId, user.customer.phone)) ??
+      undefined;
+    if (!accountId) return; // e.g. customer has no usable phone for a loyalty mapping
+
+    if (user.loyaltyAccountId !== accountId) {
+      user.loyaltyAccountId = accountId;
+      store.putUser(user);
+    }
+
+    // Idempotency-keyed so a retried payment never double-earns.
+    const points = await accumulatePoints(env, accountId, squareOrderId, `earn-${idempotencyKey}`);
+    if (points !== null) {
+      paid.starsEarned = points; // reflect Square's authoritative accrual
+      store.putOrder(user.customer.id, paid);
+      user.stars += points; // display mirror only; Square is source of truth
+      store.putUser(user);
+    }
+  } catch {
+    // Never let loyalty break a paid order.
+  }
+}
 
 /**
  * Charge a previously-created order using the on-device card token (sourceId).
@@ -57,9 +101,15 @@ export async function createPayment(req: Request, env: Env, user: StoredUser): P
   const paid: Order = { ...order, status: "RECEIVED", updatedAt: new Date().toISOString() };
   store.putOrder(user.customer.id, paid);
 
-  // Award Stars (production: Square Loyalty accrual event from the payment).
-  user.stars += paid.starsEarned ?? 0;
-  store.putUser(user);
+  // Award Stars. LIVE mode: Square Loyalty is the source of truth — accumulate
+  // points against the paid Square order. Mock mode: keep the local increment so
+  // the app still demos without a Square loyalty program.
+  if (isLive(env)) {
+    await earnLoyalty(env, user, order.squareOrderId, idempotencyKey, paid);
+  } else {
+    user.stars += paid.starsEarned ?? 0;
+    store.putUser(user);
+  }
 
   if (!isLive(env)) {
     await notifyStaffNewOrder(env, paid.displayNumber, paid.lineItems.length);

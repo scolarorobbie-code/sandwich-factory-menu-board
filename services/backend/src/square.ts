@@ -289,6 +289,30 @@ export async function createSquareOrder(
       net_amounts?: { total_money?: { amount?: number } };
     };
   };
+  return toOrderResult(order);
+}
+
+/**
+ * Re-read an order's authoritative totals from Square. Used after a loyalty
+ * reward is attached so our Order reflects Square's recomputed discount/total.
+ */
+export async function retrieveSquareOrder(env: Env, squareOrderId: string): Promise<SquareOrderResult> {
+  const res = await squareFetch(env, `/v2/orders/${squareOrderId}`, { method: "GET" });
+  if (!res.ok) {
+    throw new Error(`Square order retrieve error ${res.status}: ${await res.text()}`);
+  }
+  const { order } = (await res.json()) as { order?: SquareOrderMoney };
+  return toOrderResult(order);
+}
+
+interface SquareOrderMoney {
+  id?: string;
+  total_money?: { amount?: number };
+  total_tax_money?: { amount?: number };
+  total_discount_money?: { amount?: number };
+}
+
+function toOrderResult(order: SquareOrderMoney | undefined): SquareOrderResult {
   const tax = order?.total_tax_money?.amount ?? 0;
   const discount = order?.total_discount_money?.amount ?? 0;
   const total = order?.total_money?.amount ?? 0;

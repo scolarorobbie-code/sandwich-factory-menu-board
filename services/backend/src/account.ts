@@ -1,24 +1,31 @@
 import type {
   CreateFavoriteRequest,
   Favorite,
-  Loyalty,
   RegisterDeviceRequest,
 } from "@sf/contract";
-import type { Env } from "./env";
+import { isLive, type Env } from "./env";
+import { getLoyaltyView } from "./loyalty";
 import { error, json, noContent } from "./responses";
 import { store, type StoredUser } from "./store";
 
-/** Stars balance + reward tiers (Square Loyalty in production; branding: "Stars"). */
-export function getLoyalty(user: StoredUser): Response {
-  const loyalty: Loyalty = {
+/**
+ * Stars balance + reward tiers. Branding: "Stars".
+ * LIVE: reads the real Square Loyalty program + the customer's Square balance
+ * (falls back to the local mirror if the program/account isn't available).
+ * MOCK: serves the local balance + a static reward ladder so the app demos.
+ */
+export async function getLoyalty(env: Env, user: StoredUser): Promise<Response> {
+  if (isLive(env)) {
+    return json(await getLoyaltyView(env, user.loyaltyAccountId, user.stars));
+  }
+  return json({
     stars: user.stars,
     earnRule: "1 Star per $1 spent",
     rewards: [
       { id: "reward-5", name: "$5 off", cost: 50, value: { amount: 500, currency: "USD" } },
       { id: "reward-10", name: "$10 off", cost: 100, value: { amount: 1000, currency: "USD" } },
     ],
-  };
-  return json(loyalty);
+  });
 }
 
 export function listFavorites(user: StoredUser): Response {
