@@ -10,7 +10,7 @@ interface AuthState {
   customer: Customer | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, firstName: string) => Promise<void>;
+  signUp: (email: string, password: string, firstName: string, phone?: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -66,8 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       customer,
       loading,
       signIn: async (email, password) => applyAuth(await api.login({ email, password })),
-      signUp: async (email, password, firstName) =>
-        applyAuth(await api.register({ email, password, firstName })),
+      signUp: async (email, password, firstName, phone) =>
+        applyAuth(await api.register({ email, password, firstName, phone })),
       signOut: clearTokens,
     }),
     [customer, loading],
