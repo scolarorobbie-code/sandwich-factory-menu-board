@@ -20,3 +20,6 @@ web-build/
 # os / editor
 .DS_Store
 *.log
+
+# claude code — agent worktrees & local scratch (never commit)
+.claude/
