@@ -28,6 +28,7 @@ tags:
   - name: Devices
   - name: System
   - name: Webhooks
+  - name: Admin
 
 paths:
   /health:
@@ -308,6 +309,46 @@ paths:
         "200": { description: Accepted (or ignored duplicate) }
         "401":
           description: Signature verification failed
+
+  /admin/overrides:
+    get:
+      tags: [Admin]
+      summary: >
+        Read the merchant control-panel menu overrides (required/min/max,
+        conditional groups, hide/sold-out, prep time). Square stays the source
+        of truth; these are layered on top of the live menu by the backend.
+      description: >
+        FOUNDATION ONLY. Self-gated to dev/sandbox (403 in production) until a
+        real admin auth layer is built — TODO(admin-auth). Not a customer-JWT
+        route.
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuOverrides" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Admin]
+      summary: Replace the stored menu overrides document
+      description: >
+        FOUNDATION ONLY. Self-gated to dev/sandbox (403 in production) until a
+        real admin auth layer is built — TODO(admin-auth).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PutOverridesRequest" }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuOverrides" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
 
 components:
   securitySchemes:
@@ -698,3 +739,77 @@ components:
             type: { type: string }
             id: { type: string }
             object: {}
+
+    # --- Merchant control panel (Orda-style admin layer) ---
+    ConditionalRule:
+      type: object
+      description: >
+        Reveal a modifier group only once a trigger modifier in another group is
+        selected (data-driven version of the app's combo→drink heuristic).
+      required: [hiddenUntilTriggered]
+      properties:
+        hiddenUntilTriggered: { type: boolean, enum: [true] }
+        triggerGroupIds:
+          type: array
+          items: { type: string }
+          description: Square MODIFIER_LIST ids whose selection can trigger this group.
+        triggerModifierIds:
+          type: array
+          items: { type: string }
+          description: Square MODIFIER ids that, when selected, reveal this group.
+
+    GroupOverride:
+      type: object
+      description: Per modifier-GROUP override. Square remains the source of the modifiers.
+      required: [groupId]
+      properties:
+        groupId: { type: string, description: Square MODIFIER_LIST id. }
+        required: { type: boolean }
+        minSelections: { type: integer }
+        maxSelections: { type: integer }
+        conditional: { $ref: "#/components/schemas/ConditionalRule" }
+
+    ItemOverride:
+      type: object
+      description: Per-ITEM override. Square remains the source of the item + price.
+      required: [itemId]
+      properties:
+        itemId: { type: string, description: Square ITEM id. }
+        hidden: { type: boolean }
+        soldOut: { type: boolean }
+        prepTimeMinutes: { type: integer, description: Feeds Square order pickup_at later. }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/GroupOverride" }
+
+    DealOverride:
+      type: object
+      description: Per-deal override stub (deals move into the panel later).
+      required: [dealId]
+      properties:
+        dealId: { type: string }
+        enabled: { type: boolean }
+
+    MenuOverrides:
+      type: object
+      required: [items, deals, updatedAt]
+      properties:
+        items:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/ItemOverride" }
+          description: Map of Square ITEM id → item override.
+        deals:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/DealOverride" }
+        updatedAt: { type: string, format: date-time }
+
+    PutOverridesRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/ItemOverride" }
+        deals:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/DealOverride" }

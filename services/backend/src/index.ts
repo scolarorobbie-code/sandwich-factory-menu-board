@@ -1,5 +1,6 @@
 import type { Health } from "@sf/contract";
 import { addFavorite, getLoyalty, listFavorites, registerDevice, removeFavorite } from "./account";
+import { getOverrides, putOverrides } from "./admin";
 import { appleAuth, login, me, refresh, register, requireAuth } from "./auth";
 import type { Env } from "./env";
 import { getDeals, getMenu } from "./menu";
@@ -45,6 +46,12 @@ export default {
       if (pathname === "/webhooks/square" && method === "POST") {
         return await handleSquareWebhook(req, env);
       }
+
+      // ---------- Merchant control panel (admin) ----------
+      // Foundation only: self-gated to dev/sandbox until admin auth is built
+      // (see admin.ts adminAllowed + TODO). Not a customer-JWT route.
+      if (pathname === "/admin/overrides" && method === "GET") return getOverrides(env);
+      if (pathname === "/admin/overrides" && method === "PUT") return await putOverrides(req, env);
 
       // ---------- Authenticated ----------
       const user = await requireAuth(req, env);

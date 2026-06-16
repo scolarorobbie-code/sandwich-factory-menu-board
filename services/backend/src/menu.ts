@@ -1,11 +1,19 @@
 import type { Deal, Menu } from "@sf/contract";
 import { isLive, type Env } from "./env";
 import { MOCK_MENU } from "./mocks/menu";
+import { applyOverrides, overridesStore } from "./overrides";
 import { fetchLiveMenu } from "./square";
 
-/** The menu, from live Square Catalog when credentials are present, else mock. */
+/**
+ * The menu, from live Square Catalog when credentials are present, else mock.
+ *
+ * Square stays the source of truth; the merchant control-panel overrides
+ * (required/min/max, conditional groups, hide/sold-out) are layered on AFTER
+ * the live fetch so they never become a competing source of items/prices.
+ */
 export async function getMenu(env: Env): Promise<Menu> {
-  return isLive(env) ? fetchLiveMenu(env) : MOCK_MENU;
+  const base = isLive(env) ? await fetchLiveMenu(env) : MOCK_MENU;
+  return applyOverrides(base, overridesStore.get());
 }
 
 /**
