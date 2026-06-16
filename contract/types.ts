@@ -329,6 +329,106 @@ export interface Health {
 }
 
 // ---------------------------------------------------------------------------
+// Menu overrides (merchant control panel — the "Orda-style" admin layer)
+//
+// Square stays the SOURCE OF TRUTH for items, variations, prices, modifiers and
+// photos. These overrides are stored on OUR side (the control panel) and layered
+// on top of the live Square menu by the backend after fetchLiveMenu. They capture
+// the rules Square's own API cannot express per-group (required/min/max,
+// conditional reveal) plus operational toggles (hide / sold-out / prep time).
+//
+// IDs reference Square catalog object IDs:
+//   - item override key   = the Square ITEM object id (MenuItem.id)
+//   - group override key   = the Square MODIFIER_LIST id (ModifierGroup.id)
+//   - modifier id (in conditional triggers) = the Square MODIFIER id (Modifier.id)
+//
+// Design note: the conditional-modifier concept currently lives in the app as a
+// regex heuristic (isConditionalGroup/isComboTrigger via /drink/ + /combo/ in
+// ItemDetailScreen). `ConditionalRule` is the DATA shape that can eventually
+// drive the SAME behavior without regex. The app heuristic stays in place until
+// the app reads these overrides; this layer is additive for now.
+// ---------------------------------------------------------------------------
+
+/**
+ * Reveal a modifier group only when a "trigger" modifier in another group is
+ * selected. Mirrors the app's combo→drink heuristic, but data-driven.
+ */
+export interface ConditionalRule {
+  /** Group is hidden until the condition below is met. */
+  hiddenUntilTriggered: true;
+  /**
+   * Group IDs (Square MODIFIER_LIST ids) whose selection can trigger this group.
+   * When empty, `triggerModifierIds` alone decides.
+   */
+  triggerGroupIds?: string[];
+  /**
+   * Specific modifier IDs (Square MODIFIER ids) that, when selected, reveal this
+   * group (e.g. the "Make it a combo" option). When empty, ANY selection in a
+   * `triggerGroupIds` group reveals it.
+   */
+  triggerModifierIds?: string[];
+}
+
+/** Per-modifier-GROUP override. Square is still the source of the modifiers. */
+export interface GroupOverride {
+  /** Square MODIFIER_LIST id this override applies to. */
+  groupId: string;
+  /** Force the group required (true) / optional (false). Omit = use Square. */
+  required?: boolean;
+  /** Minimum selections. Omit = use Square's min. */
+  minSelections?: number;
+  /** Maximum selections. Omit = use Square's max. */
+  maxSelections?: number;
+  /** When present, the group only shows once the rule is triggered. */
+  conditional?: ConditionalRule;
+}
+
+/** Per-ITEM override. Square is still the source of the item + price. */
+export interface ItemOverride {
+  /** Square ITEM id this override applies to. */
+  itemId: string;
+  /** Hide the item from the menu entirely (e.g. seasonal pull). */
+  hidden?: boolean;
+  /** Mark sold out for today without touching Square Inventory. */
+  soldOut?: boolean;
+  /** Prep time in minutes → feeds Square order `pickup_at` later. */
+  prepTimeMinutes?: number;
+  /** Per-group overrides for this item's modifier groups. */
+  groups?: GroupOverride[];
+}
+
+/**
+ * Per-deal override stub. Deals currently come from menu.ts (mock) and will move
+ * here so the owner can edit them in the panel. Shape TBD — left as a stub.
+ */
+export interface DealOverride {
+  /** Our deal id. */
+  dealId: string;
+  /** TODO: title/description/code/window/active edited from the panel. */
+  enabled?: boolean;
+}
+
+/**
+ * The full overrides document the control panel reads/writes. Keyed maps keep
+ * lookups O(1) when applying to the menu and make the in-memory → KV/D1 swap a
+ * localized change (mirrors store.ts conventions).
+ */
+export interface MenuOverrides {
+  /** Map of Square ITEM id → item override. */
+  items: Record<string, ItemOverride>;
+  /** Map of our deal id → deal override (stub for now). */
+  deals: Record<string, DealOverride>;
+  /** Last-write timestamp for cache busting / optimistic concurrency. */
+  updatedAt: Timestamp;
+}
+
+/** PUT /admin/overrides request — replaces the stored overrides document. */
+export interface PutOverridesRequest {
+  items: Record<string, ItemOverride>;
+  deals?: Record<string, DealOverride>;
+}
+
+// ---------------------------------------------------------------------------
 // Square webhook payload (backend-internal; verified by HMAC, de-duped by id)
 // ---------------------------------------------------------------------------
 
