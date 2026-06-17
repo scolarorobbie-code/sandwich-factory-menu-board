@@ -41,5 +41,8 @@ jobs:
         run: npx tsc --noEmit
         working-directory: apps/mobile
 
-      - name: Run tests
-        run: npm run test
+      - name: Run backend tests
+        run: npm --workspace services/backend run test
+
+      - name: Run mobile tests
+        run: npm --workspace apps/mobile run test

@@ -1,5 +1,8 @@
 import type { Money } from "@sf/contract";
-import { palette } from "./brand";
+// Source the palette from the RN-free module directly (brand.ts re-exports the
+// same object). This keeps theme.ts importable without evaluating brand.ts's
+// logo-asset `require`. Values are identical to before.
+import { palette } from "./palette";
 
 // `colors` is DERIVED from the single brand source of truth (src/brand.ts).
 // The object shape AND values are IDENTICAL to what they were before — every

@@ -7,7 +7,9 @@
     "start": "expo start",
     "ios": "expo start --ios",
     "android": "expo start --android",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.2.0",
@@ -26,6 +28,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "typescript": "~5.9.0"
+    "typescript": "~5.9.0",
+    "vitest": "^3.2.6"
   }
 }

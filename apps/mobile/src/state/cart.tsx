@@ -1,24 +1,11 @@
 import type { CartLineItem, Menu, MenuItem, MenuVariation, Modifier } from "@sf/contract";
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+// The pure cart math + CartEntry shape live in a React-free sibling module so
+// they can be unit-tested without importing React. Re-exported here so every
+// existing `import { CartEntry, entryTotal } from "../state/cart"` is unchanged.
+import { type CartEntry, entryTotal, entryUnitPrice } from "./cart.logic";
 
-/** A cart entry keeps display info alongside the ids the API needs. */
-export interface CartEntry {
-  key: string;
-  itemName: string;
-  variation: MenuVariation;
-  modifiers: Modifier[];
-  quantity: number;
-  note?: string;
-  /** ids for the API */
-  itemId: string;
-}
-
-export function entryUnitPrice(e: CartEntry): number {
-  return e.variation.price.amount + e.modifiers.reduce((s, m) => s + m.price.amount, 0);
-}
-export function entryTotal(e: CartEntry): number {
-  return entryUnitPrice(e) * e.quantity;
-}
+export { type CartEntry, entryTotal, entryUnitPrice };
 
 /** Result of re-adding saved/historical line items against the current menu. */
 export interface AddLineItemsResult {
