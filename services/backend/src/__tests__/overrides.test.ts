@@ -46,11 +46,6 @@ function overrides(items: MenuOverrides["items"]): MenuOverrides {
   return { items, deals: {}, updatedAt: "2026-01-01T00:00:00.000Z" };
 }
 
-/** Cast helper: the override layer attaches `__conditional` additively. */
-type GroupWithMeta = Menu["categories"][number]["items"][number]["modifierGroups"][number] & {
-  __conditional?: ConditionalRule;
-};
-
 describe("applyOverrides", () => {
   it("returns the menu unchanged when there are no item overrides", () => {
     const menu = baseMenu();
@@ -111,7 +106,7 @@ describe("applyOverrides", () => {
     expect(out.categories[0].items[0].modifierGroups[0].minSelections).toBe(0);
   });
 
-  it("attaches a conditional rule via __conditional metadata", () => {
+  it("promotes a conditional rule onto the contract `conditional` field", () => {
     const rule: ConditionalRule = {
       hiddenUntilTriggered: true,
       triggerModifierIds: ["combo-mod"],
@@ -120,8 +115,8 @@ describe("applyOverrides", () => {
       baseMenu(),
       overrides({ "item-a": { itemId: "item-a", groups: [{ groupId: "grp-bread", conditional: rule }] } }),
     );
-    const grp = out.categories[0].items[0].modifierGroups[0] as GroupWithMeta;
-    expect(grp.__conditional).toEqual(rule);
+    const grp = out.categories[0].items[0].modifierGroups[0];
+    expect(grp.conditional).toEqual(rule);
   });
 
   it("does not mutate the input menu (pure)", () => {

@@ -12,12 +12,49 @@ import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ItemDetail">;
 
-// --- Conditional modifiers (bridge until the merchant control panel) ---
+// --- Conditional modifiers ---
 // A "Choose your drink" group only appears once a combo option is selected.
-// The owner adds the drink group in Square; this reveals it at the right moment.
+//
+// Source of truth: the merchant control panel's `conditional` override data on
+// the modifier group (contract field `ModifierGroup.conditional`). When the
+// owner has configured ANY group on this item with conditional data, we drive
+// visibility + auto-reveal purely from that data. When NO group carries it, we
+// fall back to the legacy regex heuristic below so items the owner hasn't
+// configured still behave exactly as before.
 const isConditionalGroup = (g: ModifierGroup) => /drink/i.test(g.name);
 const isComboTrigger = (name: string) =>
   /drink/i.test(name) || (/combo/i.test(name) && !/no\s+combo/i.test(name));
+
+/** A group is data-conditional when the panel marked it hidden-until-triggered. */
+const hasConditionalRule = (g: ModifierGroup) => g.conditional?.hiddenUntilTriggered === true;
+
+/**
+ * Does the current selection satisfy a group's `ConditionalRule`?
+ * - a selected modifier id is in `triggerModifierIds`, OR
+ * - a selected modifier belongs to a group in `triggerGroupIds`, OR
+ * - (both lists empty) any non-conditional combo-trigger modifier is selected.
+ */
+function ruleTriggered(group: ModifierGroup, allGroups: ModifierGroup[], selected: Set<string>): boolean {
+  const rule = group.conditional;
+  if (!rule) return true;
+  const modIds = rule.triggerModifierIds ?? [];
+  const grpIds = rule.triggerGroupIds ?? [];
+  if (modIds.length === 0 && grpIds.length === 0) {
+    // No explicit trigger: reveal once anything in a non-conditional group is chosen.
+    return allGroups
+      .filter((g) => !hasConditionalRule(g))
+      .flatMap((g) => g.modifiers)
+      .some((m) => selected.has(m.id));
+  }
+  if (modIds.some((id) => selected.has(id))) return true;
+  if (grpIds.length) {
+    return allGroups
+      .filter((g) => grpIds.includes(g.id))
+      .flatMap((g) => g.modifiers)
+      .some((m) => selected.has(m.id));
+  }
+  return false;
+}
 
 export default function ItemDetailScreen({ route, navigation }: Props) {
   const { item } = route.params;
@@ -64,22 +101,35 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
 
   const variation = item.variations.find((v) => v.id === variationId)!;
 
-  // Reveal a "Choose your drink" group only after a combo option is picked.
-  const comboPicked = item.modifierGroups
-    .filter((g) => !isConditionalGroup(g))
-    .flatMap((g) => g.modifiers)
-    .some((m) => selected.has(m.id) && isComboTrigger(m.name));
-  const visibleGroups = item.modifierGroups.filter((g) => !isConditionalGroup(g) || comboPicked);
+  // Prefer the panel's conditional DATA when ANY group on this item carries it;
+  // otherwise fall back to the legacy regex heuristic for unconfigured items.
+  const groups = item.modifierGroups;
+  const usingData = groups.some(hasConditionalRule);
 
-  // Auto-open the drink picker the moment a combo is chosen.
+  // Which groups are "conditional" (start hidden), and whether each is revealed.
+  const isHidden = (g: ModifierGroup) => (usingData ? hasConditionalRule(g) : isConditionalGroup(g));
+  const isRevealed = (g: ModifierGroup): boolean => {
+    if (usingData) return ruleTriggered(g, groups, selected);
+    // Regex fallback: any non-conditional combo-trigger modifier is selected.
+    return groups
+      .filter((x) => !isConditionalGroup(x))
+      .flatMap((x) => x.modifiers)
+      .some((m) => selected.has(m.id) && isComboTrigger(m.name));
+  };
+  const isVisible = (g: ModifierGroup) => !isHidden(g) || isRevealed(g);
+  const visibleGroups = groups.filter(isVisible);
+
+  // Auto-open a conditional group the moment its trigger is selected. Tracked by
+  // a stable signature so the effect only re-runs when visibility actually changes.
+  const revealedSig = groups.filter((g) => isHidden(g) && isRevealed(g)).map((g) => g.id).join(",");
   useEffect(() => {
-    if (!comboPicked) return;
+    if (!revealedSig) return;
     setExpanded((prev) => {
       const next = new Set(prev);
-      item.modifierGroups.filter(isConditionalGroup).forEach((g) => next.add(g.id));
+      revealedSig.split(",").forEach((id) => next.add(id));
       return next;
     });
-  }, [comboPicked]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [revealedSig]);
 
   // Hidden conditional groups don't count toward price, validation, or the cart.
   const chosenMods = visibleGroups.flatMap((g) => g.modifiers.filter((m) => selected.has(m.id)));
