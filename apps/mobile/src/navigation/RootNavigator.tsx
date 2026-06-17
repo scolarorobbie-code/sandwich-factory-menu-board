@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Text } from "react-native";
 import { useCart } from "../state/cart";
 import { colors } from "../theme";
+import { Brandmark } from "../components/Brandmark";
 import AccountScreen from "../screens/AccountScreen";
 import AuthScreen from "../screens/AuthScreen";
 import CartScreen from "../screens/CartScreen";
@@ -35,7 +36,16 @@ function Tabs() {
       <Tab.Screen
         name="Menu"
         component={MenuScreen}
-        options={{ tabBarIcon: icon("🥪"), tabBarBadge: cart.count || undefined }}
+        options={{
+          tabBarIcon: icon("🥪"),
+          tabBarBadge: cart.count || undefined,
+          // Brand wordmark replaces the plain "Menu" title in the existing
+          // header bar (same bar, same colors). Becomes the real logo image
+          // automatically once src/brand.ts has one. `headerTitleAlign` keeps
+          // it centered consistently across iOS/Android.
+          headerTitle: () => <Brandmark />,
+          headerTitleAlign: "center",
+        }}
       />
       <Tab.Screen name="Deals" component={DealsScreen} options={{ tabBarIcon: icon("🔥") }} />
       <Tab.Screen name="Account" component={AccountScreen} options={{ tabBarIcon: icon("⭐") }} />

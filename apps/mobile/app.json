@@ -18,7 +18,14 @@
       "package": "com.scolaroenterprises.sandwichfactory"
     },
     "extra": {
-      "comment": "EXPO_PUBLIC_API_BASE_URL is read from the environment at build/start time. See src/config.ts."
+      "comment": "EXPO_PUBLIC_API_BASE_URL is read from the environment at build/start time. See src/config.ts.",
+      "brandingTODO": {
+        "note": "NO logo/icon assets exist yet, so this config intentionally relies on Expo's BUILT-IN DEFAULT icon + splash. We deliberately do NOT set 'icon', 'splash.image', or 'android.adaptiveIcon' because pointing them at files that don't exist breaks EAS builds. When the owner sends the real logo, add the asset files under apps/mobile/assets/ then add the keys below. Full checklist: docs/BRANDING.md.",
+        "icon": "Add top-level expo.icon = './assets/icon.png' — 1024x1024 PNG, opaque (no transparency), square, no pre-rounded corners (Apple/Google mask it).",
+        "splashImage": "Add 'image': './assets/splash.png' inside expo.splash — a centered ~1200x1200 logo on the #15110f background; keep resizeMode 'contain'.",
+        "androidAdaptiveIcon": "Add expo.android.adaptiveIcon = { foregroundImage: './assets/adaptive-icon.png' (1024x1024, logo centered in the safe zone, transparent bg), backgroundColor: '#15110f' }.",
+        "iosTablet": "supportsTablet is true — the icon must also read well at iPad sizes."
+      }
     }
   }
 }
