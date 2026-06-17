@@ -1,4 +1,4 @@
-import type { AuthResponse, Customer } from "@sf/contract";
+import type { AppleAuthRequest, AuthResponse, Customer } from "@sf/contract";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, setTokenProvider } from "../api/client";
@@ -12,6 +12,9 @@ interface AuthState {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, firstName: string, phone?: string) => Promise<void>;
+  /** Sign in with Apple. The native flow (expo-apple-authentication, EAS build)
+   * supplies the credential; this exchanges it with the backend. */
+  signInWithApple: (cred: AppleAuthRequest) => Promise<void>;
   signOut: () => Promise<void>;
   /** Replace the in-memory customer after a profile update (PATCH /me). */
   updateCustomer: (customer: Customer) => void;
@@ -39,6 +42,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAccessToken(tokens.accessToken);
           setTokenProvider(() => tokens.accessToken);
           await SecureStore.setItemAsync(ACCESS_KEY, tokens.accessToken);
+          // The backend rotates the refresh token on every refresh — persist the
+          // new one so a future revocation/rotation scheme can't strand the user.
+          await SecureStore.setItemAsync(REFRESH_KEY, tokens.refreshToken);
           setCustomer(await api.me());
           // Already-authed launch: (re)register this device for push. Tokens can
           // rotate, so we refresh the registration each session. Fire-and-forget
@@ -79,6 +85,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signIn: async (email, password) => applyAuth(await api.login({ email, password })),
       signUp: async (email, password, firstName, phone) =>
         applyAuth(await api.register({ email, password, firstName, phone })),
+      signInWithApple: async (cred) => applyAuth(await api.apple(cred)),
       signOut: clearTokens,
       updateCustomer: setCustomer,
     }),

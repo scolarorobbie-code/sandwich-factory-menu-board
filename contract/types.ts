@@ -324,8 +324,13 @@ export interface Favorite {
 
 export interface CreateFavoriteRequest {
   name: string;
-  /** Either build from scratch or snapshot from a past order. */
+  /** The build to save. Currently REQUIRED — the only supported path. */
   lineItems?: CartLineItem[];
+  /**
+   * NOT YET SUPPORTED. Saving a favorite directly from a past order is rejected
+   * (422) because stored orders don't retain modifier ids; reconstructing the
+   * cart needs an order-time cart snapshot (future work). Send `lineItems`.
+   */
   fromOrderId?: string;
 }
 

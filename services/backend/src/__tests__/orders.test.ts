@@ -128,6 +128,17 @@ describe("createOrder (mock-mode tax / discount / Stars math)", () => {
     expect(order.starsEarned).toBe(8); // floor(849 / 100)
   });
 
+  it("sets a pickup.readyEta in the future (drives the order-status ETA)", async () => {
+    const before = Date.now();
+    const { order } = await place({
+      lineItems: [{ itemId: ITALIAN, variationId: ITALIAN_6, quantity: 1, modifierIds: [] }],
+    });
+    expect(order.pickup?.readyEta).toBeTruthy();
+    const eta = new Date(order.pickup!.readyEta!).getTime();
+    // Default prep floor is 10 min, so the ETA must be at least ~10 min out.
+    expect(eta).toBeGreaterThanOrEqual(before + 9 * 60_000);
+  });
+
   it("applies the free-cookie deal ($2.49 off) once subtotal >= $15", async () => {
     const { order } = await place({
       lineItems: [

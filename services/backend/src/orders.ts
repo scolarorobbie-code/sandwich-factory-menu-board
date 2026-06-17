@@ -93,24 +93,37 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
 
   const subtotal = lineItems.reduce((s, l) => s + l.total.amount, 0);
 
-  // Mock-mode discounts: app-exclusive deal codes + Stars redemption (50=$5).
-  // In LIVE mode Square computes all totals authoritatively, and Stars are
-  // redeemed as a real Square Loyalty reward below (these locals are ignored).
-  let discount = 0;
+  // App-exclusive deal discount (control-panel managed via the DealDiscount
+  // spec, not a hardcoded id check; doubleStars/expired/disabled → 0). Resolved
+  // for BOTH modes: mock applies it to local totals; live passes it to Square as
+  // an ad-hoc ORDER discount so the REAL charge is reduced too.
+  let dealCents = 0;
+  let dealName: string | undefined;
   if (body.dealId) {
-    // Deal discount is driven by the override's DealDiscount spec (control-panel
-    // managed), not a hardcoded id check. doubleStars deals yield 0 here (they
-    // affect Stars accrual, not the total). Expired/disabled deals resolve to
-    // undefined and never discount.
     const deal = await getApplicableDealOverride(env, body.dealId);
-    if (deal) discount += dealDiscountCents(deal, subtotal);
+    if (deal) {
+      dealCents = Math.min(dealDiscountCents(deal, subtotal), subtotal);
+      dealName = deal.title;
+    }
   }
+
+  // Stars redemption in MOCK mode only (50 Stars = $5). In LIVE mode Stars are
+  // redeemed as a real Square Loyalty reward below (Square computes the total).
+  let discount = dealCents;
   if (!isLive(env) && body.redeemStars && body.redeemStars > 0) {
     const redeemable = Math.min(body.redeemStars, user.stars);
     const blocks = Math.floor(redeemable / 50);
     discount += blocks * 500;
   }
   discount = Math.min(discount, subtotal);
+
+  // Prep time → scheduled pickup. Drives Square `pickup_at` (live) AND the
+  // customer-facing "ready by" ETA shown on the order-status screen (both modes).
+  const prepMinutes = Math.max(
+    DEFAULT_PREP_MINUTES,
+    maxPrepTimeMinutes(await overridesStore.get(env), body.lineItems.map((l) => l.itemId)),
+  );
+  const readyEta = new Date(Date.now() + prepMinutes * 60_000).toISOString();
 
   // Totals + Square order id. Live mode lets Square compute tax authoritatively
   // and creates the real PICKUP order in the POS; mock computes locally.
@@ -130,16 +143,10 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
       }));
       const idempotencyKey = req.headers.get("Idempotency-Key") ?? crypto.randomUUID();
       const name = [user.customer.firstName, user.customer.lastName].filter(Boolean).join(" ");
-      // Prep time → Square `pickup_at`: now + the largest control-panel
-      // prepTimeMinutes across the ordered items (floored at DEFAULT_PREP_MINUTES).
-      const prepMinutes = Math.max(
-        DEFAULT_PREP_MINUTES,
-        maxPrepTimeMinutes(await overridesStore.get(env), body.lineItems.map((l) => l.itemId)),
-      );
-      const pickupAt = new Date(Date.now() + prepMinutes * 60_000).toISOString();
-      // NOTE: app-level deal discounts are applied as ad-hoc Square discounts in
-      // a later pass; for now Square's catalog totals are source.
-      let sq = await createSquareOrder(env, sqLines, idempotencyKey, name, body.pickupNote, pickupAt);
+      // Pass the app deal to Square as an ad-hoc ORDER discount so the real
+      // charge reflects it (Square then recomputes authoritative tax/total).
+      const sqDiscount = dealCents > 0 ? { name: dealName ?? "App deal", amountCents: dealCents } : undefined;
+      let sq = await createSquareOrder(env, sqLines, idempotencyKey, name, body.pickupNote, readyEta, sqDiscount);
       squareOrderId = sq.squareOrderId;
 
       // Stars redemption: in LIVE mode this is a real Square Loyalty reward, so
@@ -179,7 +186,7 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
     discount: discountM,
     total: totalM,
     starsEarned: Math.floor(subtotalM.amount / 100) * STARS_PER_DOLLAR,
-    pickup: { note: body.pickupNote },
+    pickup: { note: body.pickupNote, readyEta },
     createdAt: now,
     updatedAt: now,
   };

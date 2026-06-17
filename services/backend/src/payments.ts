@@ -83,8 +83,10 @@ export async function createPayment(req: Request, env: Env, user: StoredUser): P
       }),
     });
     if (!res.ok) {
-      const detail = await res.text();
-      return error("PAYMENT_DECLINED", "Payment was declined", 402, detail);
+      // Log Square's full detail server-side; return only a generic message to
+      // the client (don't leak Square's internal decline payload to the app).
+      console.warn(`[payments] Square decline ${res.status}: ${await res.text()}`);
+      return error("PAYMENT_DECLINED", "Payment was declined", 402);
     }
     const data = (await res.json()) as { payment?: { id: string; receipt_url?: string } };
     paymentId = data.payment?.id ?? `sq-${idempotencyKey}`;

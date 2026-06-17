@@ -54,8 +54,18 @@ export default {
       // ADMIN_PASSWORD is unset we fall back to the dev/sandbox open gate. Not a
       // customer-JWT route. See admin.ts.
       if (pathname === "/admin" && method === "GET") {
+        // Defense-in-depth for the panel: forbid framing (clickjacking), no
+        // MIME sniffing, and a CSP that only allows the page's own inline script
+        // (the panel is a single self-contained file calling same-origin APIs).
         return new Response(adminHtml, {
-          headers: { "Content-Type": "text/html; charset=utf-8" },
+          headers: {
+            "Content-Type": "text/html; charset=utf-8",
+            "X-Frame-Options": "DENY",
+            "X-Content-Type-Options": "nosniff",
+            "Referrer-Policy": "no-referrer",
+            "Content-Security-Policy":
+              "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'",
+          },
         });
       }
       if (pathname === "/admin/login" && method === "POST") return await adminLogin(req, env);

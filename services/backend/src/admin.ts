@@ -1,5 +1,5 @@
 import type { PutOverridesRequest } from "@sf/contract";
-import { signJwt, timingSafeEqual, verifyJwt } from "./auth";
+import { jwtSecret, signJwt, timingSafeEqual, verifyJwt } from "./auth";
 import type { Env } from "./env";
 import { overridesStore } from "./overrides";
 import { error, json } from "./responses";
@@ -23,10 +23,6 @@ import { error, json } from "./responses";
  */
 
 const ADMIN_TTL = 60 * 60 * 8; // 8 hours — long enough for an editing session
-
-function jwtSecret(env: Env): string {
-  return env.JWT_SIGNING_SECRET ?? "dev-only-change-me";
-}
 
 /**
  * Decide whether the current request may touch the overrides surface.

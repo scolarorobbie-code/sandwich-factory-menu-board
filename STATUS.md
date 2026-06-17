@@ -118,6 +118,28 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   a one-tap "reorder last order" row at the top of the Menu (hidden during search,
   renders nothing for new/signed-out users). Reuses the existing reorder helper.
 
+## Branding + Android + double-check pass (2026-06-17, all merged, green, pushed)
+- **BRANDING APPLIED** — real logo colors (cream/brick-red/golden) in `brand.ts`;
+  a faithful in-brand badge recreation wired as app icon / splash / Android
+  adaptive icon / header logo (`apps/mobile/assets/`). Swap the 5 PNGs for the
+  owner's exact exports anytime — no code change (`docs/BRANDING.md`).
+- **ANDROID-READY** — notification channel, EAS Android profiles, minimal
+  permissions, `expo-build-properties` (minSdk 24 / iOS 16.4). FCM setup runbook
+  in `docs/EAS_AND_PAYMENTS.md`. Same single codebase as iOS.
+- **More features** — apply-a-deal at checkout, a Settings screen (notification
+  status + edit profile/phone via `PATCH /me`), receipt links on order status.
+- **Tests now 132** (113 backend + 19 mobile) + CI runs both suites.
+- **Three-reviewer double-check (correctness / security / integration):** all 6
+  hard security rules PASS. Fixed every real finding: JWT now fails closed in
+  prod + pins HS256; admin panel gets CSP/anti-clickjacking headers; LIVE deals
+  now apply as a real Square ad-hoc discount; `pickup.readyEta` is populated (the
+  ETA card works); Apple Sign-In wired client+state (UI button lands on the EAS
+  build); `store.reset()` leak, refresh-token rotation persistence, and a
+  `$Infinity` price-guard fixed; payment declines no longer leak Square's raw
+  detail; OpenAPI admin/advance routes + descriptions corrected. Also caught +
+  fixed two build-breakers: missing `expo-build-properties` install and an iOS
+  deployment target below Expo SDK 56's floor.
+
 ## Decisions (owner-confirmed)
 - Photos: real Square + AI fallback. Brand: **match website** (awaiting his logo +
   colors — site is bot-blocked, he must send the image). Customization: collapsible.

@@ -27,7 +27,8 @@ interface Section {
   data: MenuItem[];
 }
 
-const minPrice = (item: MenuItem) => Math.min(...item.variations.map((v) => v.price.amount));
+const minPrice = (item: MenuItem) =>
+  item.variations.length ? Math.min(...item.variations.map((v) => v.price.amount)) : 0;
 const priceLabel = (item: MenuItem) => {
   const min = minPrice(item);
   const range = item.variations.some((v) => v.price.amount !== min);

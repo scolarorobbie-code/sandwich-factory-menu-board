@@ -1,4 +1,5 @@
 import type {
+  AppleAuthRequest,
   AuthResponse,
   AuthTokens,
   CreateFavoriteRequest,
@@ -75,6 +76,9 @@ export const api = {
     request<AuthResponse>("POST", "/auth/register", { body }),
   login: (body: { email: string; password: string }) =>
     request<AuthResponse>("POST", "/auth/login", { body }),
+  /** Sign in with Apple. The native Apple flow (expo-apple-authentication, EAS
+   * build only) provides identityToken + authorizationCode. */
+  apple: (body: AppleAuthRequest) => request<AuthResponse>("POST", "/auth/apple", { body }),
   refresh: (refreshToken: string) =>
     request<AuthTokens>("POST", "/auth/refresh", { body: { refreshToken } }),
   me: () => request<Customer>("GET", "/me", { auth: true }),

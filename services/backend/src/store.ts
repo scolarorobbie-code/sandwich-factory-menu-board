@@ -130,6 +130,8 @@ export const store = {
     ordersByUser.clear();
     favoritesByUser.clear();
     seenEvents.clear();
+    ownerBySquareOrderId.clear();
+    staffTokens.clear();
     orderSeq = 1042;
   },
 };

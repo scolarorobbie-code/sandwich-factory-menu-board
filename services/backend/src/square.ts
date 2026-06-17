@@ -256,12 +256,19 @@ export async function createSquareOrder(
   customerName: string,
   pickupNote?: string,
   pickupAt?: string,
+  discount?: { name: string; amountCents: number },
 ): Promise<SquareOrderResult> {
   const pickupDetails: Record<string, unknown> = {
     recipient: { display_name: customerName },
     note: pickupNote,
     ...(pickupAt ? { pickup_at: pickupAt } : { schedule_type: "ASAP" }),
   };
+  // App-exclusive deal → ad-hoc ORDER-scope discount so Square reduces the real
+  // charge and recomputes tax/total authoritatively.
+  const discounts =
+    discount && discount.amountCents > 0
+      ? [{ name: discount.name, amount_money: { amount: discount.amountCents, currency: "USD" }, scope: "ORDER" }]
+      : undefined;
   const res = await squareFetch(env, "/v2/orders", {
     method: "POST",
     body: JSON.stringify({
@@ -274,6 +281,7 @@ export async function createSquareOrder(
           modifiers: l.modifierIds.map((id) => ({ catalog_object_id: id })),
           note: l.note,
         })),
+        ...(discounts ? { discounts } : {}),
         fulfillments: [
           {
             type: "PICKUP",

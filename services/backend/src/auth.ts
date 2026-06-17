@@ -68,6 +68,15 @@ export async function verifyJwt(secret: string, token: string, typ: JwtType): Pr
   const parts = token.split(".");
   if (parts.length !== 3) return null;
   const [header, payload, sig] = parts;
+  // Pin the algorithm: reject anything that isn't HS256 before verifying. This
+  // hardens against alg-confusion / "alg":"none" even if this path is later
+  // refactored to branch on the (attacker-controlled) header.
+  try {
+    const h = JSON.parse(new TextDecoder().decode(fromB64url(header))) as { alg?: string };
+    if (h.alg !== "HS256") return null;
+  } catch {
+    return null;
+  }
   const valid = await crypto.subtle.verify(
     "HMAC",
     await hmacKey(secret),
@@ -86,8 +95,21 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return constantTimeEqual(a, b);
 }
 
+/**
+ * Resolve the JWT signing secret. In PRODUCTION we FAIL CLOSED if it's unset
+ * rather than fall back to a public dev constant — otherwise anyone could forge
+ * access/refresh/admin tokens. Exported so admin.ts uses the same rule.
+ */
+export function jwtSecret(env: Env): string {
+  if (env.JWT_SIGNING_SECRET) return env.JWT_SIGNING_SECRET;
+  if (env.SQUARE_ENVIRONMENT === "production") {
+    throw new Error("JWT_SIGNING_SECRET is not configured (refusing to sign with a default in production)");
+  }
+  return "dev-only-change-me";
+}
+
 async function issueTokens(env: Env, userId: string): Promise<AuthTokens> {
-  const secret = env.JWT_SIGNING_SECRET ?? "dev-only-change-me";
+  const secret = jwtSecret(env);
   const now = Math.floor(Date.now() / 1000);
   return {
     accessToken: await signJwt(secret, { sub: userId, typ: "access", exp: now + ACCESS_TTL }),
@@ -207,7 +229,7 @@ export async function appleAuth(req: Request, env: Env): Promise<Response> {
 
 export async function refresh(req: Request, env: Env): Promise<Response> {
   const body = (await req.json()) as RefreshRequest;
-  const secret = env.JWT_SIGNING_SECRET ?? "dev-only-change-me";
+  const secret = jwtSecret(env);
   const claims = await verifyJwt(secret, body.refreshToken ?? "", "refresh");
   if (!claims) return error("UNAUTHENTICATED", "Invalid or expired refresh token", 401);
   return json(await issueTokens(env, claims.sub));
@@ -254,7 +276,7 @@ export async function updateProfile(req: Request, _env: Env, user: StoredUser): 
 export async function requireAuth(req: Request, env: Env): Promise<StoredUser | null> {
   const header = req.headers.get("authorization");
   if (!header?.startsWith("Bearer ")) return null;
-  const secret = env.JWT_SIGNING_SECRET ?? "dev-only-change-me";
+  const secret = jwtSecret(env);
   const claims = await verifyJwt(secret, header.slice(7), "access");
   if (!claims) return null;
   return store.getUser(claims.sub) ?? null;
