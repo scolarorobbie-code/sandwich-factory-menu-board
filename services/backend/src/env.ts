@@ -17,6 +17,17 @@ export interface Env {
   // In production it MUST be set, or the admin panel stays disabled.
   ADMIN_PASSWORD?: string;
 
+  // ntfy.sh backup STAFF channel (non-secret topic name). When set, new-order
+  // alerts are ALSO posted to https://ntfy.sh/<NTFY_TOPIC> so the kitchen still
+  // hears about orders even if the Expo push to the tablet fails. Optional.
+  NTFY_TOPIC?: string;
+
+  // Fixed STAFF / store-tablet Expo push token (non-secret). The simplest way to
+  // point new-order alerts at the tablet: copy the ExponentPushToken the app
+  // prints on that device into this var. Optional — the app can instead register
+  // the tablet dynamically via POST /devices { staff: true }.
+  STAFF_PUSH_TOKEN?: string;
+
   // KV namespace for idempotency keys + webhook event de-dupe (optional in dev)
   IDEMPOTENCY?: KVNamespace;
 }

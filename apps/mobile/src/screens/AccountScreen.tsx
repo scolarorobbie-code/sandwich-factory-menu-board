@@ -6,6 +6,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-nati
 import { api } from "../api/client";
 import { Button } from "../components/Button";
 import * as haptics from "../haptics";
+import { registerAsStaffDevice } from "../push";
 import { planReorder } from "../reorder";
 import { useAuth } from "../state/auth";
 import { useCart } from "../state/cart";
@@ -114,9 +115,37 @@ export default function AccountScreen() {
 
   const favCount = (f: Favorite) => f.lineItems.reduce((s, l) => s + l.quantity, 0);
 
+  // Owner-only: long-press the greeting to turn THIS device into the store
+  // tablet that receives new-order alerts. Hidden from normal customers; the
+  // step is documented for the owner. No-op on simulator / Expo Go.
+  function makeStaffTablet() {
+    Alert.alert(
+      "Use this device as the store tablet?",
+      "This iPad/phone will receive an alert every time a customer places an order. Use the dedicated kitchen device.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Make it the tablet",
+          onPress: async () => {
+            const ok = await registerAsStaffDevice();
+            haptics[ok ? "success" : "warning"]();
+            Alert.alert(
+              ok ? "Done" : "Not registered",
+              ok
+                ? "This device will now buzz for every new order."
+                : "Couldn't register (needs a real build on a physical device with notifications allowed).",
+            );
+          },
+        },
+      ],
+    );
+  }
+
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
-      <Text style={styles.hello}>Hi, {customer.firstName} 👋</Text>
+      <Text style={styles.hello} onLongPress={makeStaffTablet}>
+        Hi, {customer.firstName} 👋
+      </Text>
 
       <View style={styles.starCard}>
         <Text style={styles.starCount}>⭐ {loyalty?.stars ?? 0}</Text>

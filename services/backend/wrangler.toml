@@ -25,6 +25,16 @@ SQUARE_API_VERSION = "2026-01-22"
 SQUARE_LOCATION_ID = ""
 SQUARE_APPLICATION_ID = ""
 
+# --- Staff (kitchen tablet) notifications ---
+# NTFY_TOPIC: backup new-order channel. Pick any hard-to-guess topic name, then
+#   subscribe to it in the free ntfy app on the tablet. Leave blank to skip.
+NTFY_TOPIC = ""
+# STAFF_PUSH_TOKEN: simplest way to point new-order push at the tablet. On the
+#   tablet, sign in and open the app once — it logs its ExponentPushToken; paste
+#   it here. (Alternative: long-press the Account greeting → "Make it the tablet"
+#   registers it dynamically, no config needed.) Leave blank to use that path.
+STAFF_PUSH_TOKEN = ""
+
 # Idempotency + webhook de-dupe storage. Create with:
 #   wrangler kv namespace create IDEMPOTENCY
 # then paste the returned id below.

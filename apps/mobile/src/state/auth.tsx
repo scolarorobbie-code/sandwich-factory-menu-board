@@ -2,6 +2,7 @@ import type { AuthResponse, Customer } from "@sf/contract";
 import * as SecureStore from "expo-secure-store";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, setTokenProvider } from "../api/client";
+import { registerForPushNotifications } from "../push";
 
 const ACCESS_KEY = "sf.accessToken";
 const REFRESH_KEY = "sf.refreshToken";
@@ -37,6 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setTokenProvider(() => tokens.accessToken);
           await SecureStore.setItemAsync(ACCESS_KEY, tokens.accessToken);
           setCustomer(await api.me());
+          // Already-authed launch: (re)register this device for push. Tokens can
+          // rotate, so we refresh the registration each session. Fire-and-forget
+          // and crash-proof — never blocks session restore.
+          void registerForPushNotifications();
         }
       } catch {
         await clearTokens();
@@ -52,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await SecureStore.setItemAsync(ACCESS_KEY, res.accessToken);
     await SecureStore.setItemAsync(REFRESH_KEY, res.refreshToken);
     setCustomer(res.customer);
+    // Just signed in / up: register this device so order-status pushes can reach
+    // it. The token provider is set above, so the /devices call is authenticated.
+    // Fire-and-forget and crash-proof — never blocks the sign-in flow.
+    void registerForPushNotifications();
   }
 
   async function clearTokens() {

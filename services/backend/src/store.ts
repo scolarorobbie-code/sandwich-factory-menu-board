@@ -23,12 +23,20 @@ export interface StoredUser {
   pushTokens: { token: string; platform: "ios" | "android" }[];
 }
 
+/** A registered Expo push device token + its platform. */
+export interface DeviceToken {
+  token: string;
+  platform: "ios" | "android";
+}
+
 const usersById = new Map<string, StoredUser>();
 const usersByEmail = new Map<string, string>(); // email -> userId
 const ordersById = new Map<string, Order>();
 const ordersByUser = new Map<string, string[]>(); // userId -> orderIds (newest last)
+const ownerBySquareOrderId = new Map<string, string>(); // squareOrderId -> userId
 const favoritesByUser = new Map<string, Favorite[]>();
 const seenEvents = new Set<string>(); // webhook de-dupe fallback when no KV
+const staffTokens = new Map<string, DeviceToken>(); // token -> device (the store tablet(s))
 
 let orderSeq = 1042; // next display number starts at 1043 (matches CLAUDE.md example)
 
@@ -56,6 +64,9 @@ export const store = {
     const list = ordersByUser.get(userId) ?? [];
     if (!list.includes(order.id)) list.push(order.id);
     ordersByUser.set(userId, list);
+    // Index by Square order id so an incoming Square webhook (which only knows
+    // the Square order id) can find OUR order + its owner to push them.
+    if (order.squareOrderId) ownerBySquareOrderId.set(order.squareOrderId, userId);
   },
   listOrders(userId: string): Order[] {
     const ids = ordersByUser.get(userId) ?? [];
@@ -63,6 +74,31 @@ export const store = {
       .map((id) => ordersById.get(id))
       .filter((o): o is Order => Boolean(o))
       .reverse(); // newest first
+  },
+  /** Resolve a Square order id -> { our order, owning user }. Used by webhooks. */
+  getBySquareOrderId(squareOrderId: string): { order: Order; user: StoredUser } | undefined {
+    const userId = ownerBySquareOrderId.get(squareOrderId);
+    if (!userId) return undefined;
+    const user = usersById.get(userId);
+    if (!user) return undefined;
+    for (const id of ordersByUser.get(userId) ?? []) {
+      const order = ordersById.get(id);
+      if (order?.squareOrderId === squareOrderId) return { order, user };
+    }
+    return undefined;
+  },
+
+  // --- staff / store-tablet devices ---
+  // Separate from customer pushTokens: these get NEW-ORDER alerts, not status
+  // pushes. The owner registers the tablet via POST /devices { staff: true }.
+  addStaffToken(device: DeviceToken) {
+    staffTokens.set(device.token, device);
+  },
+  listStaffTokens: (): DeviceToken[] => [...staffTokens.values()],
+  /** Replace the staff token set (used to drop tokens Expo reports as dead). */
+  replaceStaffTokens(devices: DeviceToken[]) {
+    staffTokens.clear();
+    for (const d of devices) staffTokens.set(d.token, d);
   },
 
   // --- favorites ---
