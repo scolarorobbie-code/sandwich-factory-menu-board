@@ -147,7 +147,7 @@ export default function AccountScreen() {
         Hi, {customer.firstName} 👋
       </Text>
 
-      <View style={styles.starCard}>
+      <View style={styles.starCard} accessibilityLabel={`${loyalty?.stars ?? 0} Stars`}>
         <Text style={styles.starCount}>⭐ {loyalty?.stars ?? 0}</Text>
         <Text style={styles.starLabel}>Stars</Text>
         <Text style={styles.earnRule}>{loyalty?.earnRule ?? "1 Star per $1 spent"}</Text>
@@ -158,9 +158,15 @@ export default function AccountScreen() {
         ) : null}
       </View>
 
-      <Text style={styles.section}>Your favorites</Text>
+      <Text style={styles.section} accessibilityRole="header">
+        Your favorites
+      </Text>
       {favorites.length === 0 ? (
-        <Text style={styles.muted}>No favorites yet — save your usual from any item to reorder it in one tap.</Text>
+        <View style={styles.emptyBlock}>
+          <Text style={styles.emptyEmoji}>⭐</Text>
+          <Text style={styles.emptyTitle}>No favorites yet</Text>
+          <Text style={styles.muted}>Save your usual from any item to reorder it in one tap.</Text>
+        </View>
       ) : (
         favorites.map((f) => (
           <View key={f.id} style={styles.favorite}>
@@ -169,24 +175,47 @@ export default function AccountScreen() {
               <Text style={styles.muted}>
                 {favCount(f)} item{favCount(f) === 1 ? "" : "s"}
               </Text>
-              <Pressable onPress={() => removeFavorite(f)} hitSlop={8}>
+              <Pressable
+                onPress={() => removeFavorite(f)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${f.name} from favorites`}
+              >
                 <Text style={styles.remove}>Remove</Text>
               </Pressable>
             </View>
-            <Pressable style={styles.addBtn} onPress={() => addFavorite(f)}>
+            <Pressable
+              style={styles.addBtn}
+              onPress={() => addFavorite(f)}
+              accessibilityRole="button"
+              accessibilityLabel={`Add ${f.name} to cart`}
+              accessibilityHint="Adds this saved order to your cart"
+            >
               <Text style={styles.addBtnText}>Add to cart</Text>
             </Pressable>
           </View>
         ))
       )}
 
-      <Text style={styles.section}>Order history</Text>
+      <Text style={styles.section} accessibilityRole="header">
+        Order history
+      </Text>
       {orders.length === 0 ? (
-        <Text style={styles.muted}>No orders yet.</Text>
+        <View style={styles.emptyBlock}>
+          <Text style={styles.emptyEmoji}>🧾</Text>
+          <Text style={styles.emptyTitle}>No orders yet</Text>
+          <Text style={styles.muted}>Your past orders show up here for one-tap reordering.</Text>
+        </View>
       ) : (
         orders.map((o) => (
           <View key={o.id} style={styles.order}>
-            <Pressable style={styles.orderTop} onPress={() => nav.navigate("OrderStatus", { orderId: o.id })}>
+            <Pressable
+              style={styles.orderTop}
+              onPress={() => nav.navigate("OrderStatus", { orderId: o.id })}
+              accessibilityRole="button"
+              accessibilityLabel={`Order ${o.displayNumber}, ${o.status.toLowerCase()}, ${money(o.total)}`}
+              accessibilityHint="Opens order status"
+            >
               <View style={{ flex: 1 }}>
                 <Text style={styles.orderNum}>Order #{o.displayNumber}</Text>
                 <Text style={styles.muted} numberOfLines={1}>
@@ -202,6 +231,9 @@ export default function AccountScreen() {
               style={[styles.reorderBtn, busy === o.id && { opacity: 0.6 }]}
               onPress={() => reorder(o)}
               disabled={busy === o.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Reorder order ${o.displayNumber}`}
+              accessibilityHint="Adds these items to your cart"
             >
               <Text style={styles.reorderText}>↻ Reorder</Text>
             </Pressable>
@@ -227,6 +259,9 @@ const styles = StyleSheet.create({
   earnRule: { color: colors.muted, fontSize: 14, marginTop: 8 },
   reward: { color: colors.cyan, fontSize: 14, marginTop: 6 },
   section: { color: colors.accent2, fontSize: 20, fontWeight: "800", marginTop: 28, marginBottom: 12 },
+  emptyBlock: { alignItems: "center", paddingVertical: 16, gap: 4 },
+  emptyEmoji: { fontSize: 34, marginBottom: 2 },
+  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: "800" },
 
   favorite: { flexDirection: "row", alignItems: "center", backgroundColor: colors.card, borderRadius: 14, padding: 16, marginBottom: 10, borderWidth: 1, borderColor: colors.line },
   favName: { color: colors.text, fontSize: 16, fontWeight: "800" },

@@ -1,9 +1,10 @@
 import type { Order, OrderStatus } from "@sf/contract";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import { api } from "../api/client";
 import { Button } from "../components/Button";
+import { Skeleton } from "../components/Skeleton";
 import { colors } from "../theme";
 import type { RootStackParamList } from "../navigation/types";
 
@@ -15,6 +16,29 @@ const STEPS: { status: OrderStatus; label: string; emoji: string }[] = [
   { status: "READY", label: "Ready for pickup", emoji: "🥪" },
 ];
 const ORDER: OrderStatus[] = ["DRAFT", "RECEIVED", "MAKING", "READY", "COMPLETED"];
+
+/**
+ * ETA copy derived from the order. The Order contract carries an OPTIONAL
+ * `pickup.readyEta` (ISO timestamp, fed by the backend's prep-time → Square
+ * `pickup_at`). When present we show a friendly clock time + minutes-away.
+ * When it's absent (or the order is already done) we fall back to warm static
+ * reassurance — NO contract fields are added.
+ */
+function etaCopy(order: Order): string | null {
+  if (order.status === "READY" || order.status === "COMPLETED" || order.status === "CANCELED") return null;
+  const iso = order.pickup?.readyEta;
+  if (!iso) {
+    return order.status === "MAKING"
+      ? "We're on it — your order is being made fresh."
+      : "We've got your order — we'll start it right away.";
+  }
+  const ready = new Date(iso).getTime();
+  if (Number.isNaN(ready)) return "We've got your order — hang tight.";
+  const mins = Math.round((ready - Date.now()) / 60000);
+  const clock = new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  if (mins <= 1) return "Almost ready — any minute now.";
+  return `Ready in ~${mins} min · about ${clock}`;
+}
 
 export default function OrderStatusScreen({ route }: Props) {
   const { orderId } = route.params;
@@ -51,29 +75,63 @@ export default function OrderStatusScreen({ route }: Props) {
 
   if (!order) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.accent} />
+      <View style={styles.screen}>
+        <Skeleton style={{ width: 180, height: 30, borderRadius: 8, marginTop: 12 }} />
+        <Skeleton style={{ width: 240, height: 14, borderRadius: 6, marginTop: 12 }} />
+        <View style={{ marginTop: 36, gap: 22 }}>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={styles.step}>
+              <Skeleton style={{ width: 44, height: 44, borderRadius: 22 }} />
+              <Skeleton style={{ width: 160, height: 18, borderRadius: 6, marginTop: 12 }} />
+            </View>
+          ))}
+        </View>
       </View>
     );
   }
 
   const currentIdx = ORDER.indexOf(order.status);
+  const eta = etaCopy(order);
 
   return (
     <View style={styles.screen}>
-      <Text style={styles.number}>Order #{order.displayNumber}</Text>
+      <Text style={styles.number} accessibilityRole="header">
+        Order #{order.displayNumber}
+      </Text>
       <Text style={styles.muted}>Pickup · 116 Chaffin Pl, Murfreesboro</Text>
 
-      <View style={styles.steps}>
-        {STEPS.map((step) => {
+      {eta ? (
+        <View style={styles.etaCard} accessibilityLabel={`Estimated pickup. ${eta}`}>
+          <Text style={styles.etaLabel}>Estimated pickup</Text>
+          <Text style={styles.etaValue}>{eta}</Text>
+        </View>
+      ) : null}
+
+      <View
+        style={styles.steps}
+        accessibilityRole="progressbar"
+        accessibilityLabel={`Order status: ${STEPS.find((s) => s.status === order.status)?.label ?? order.status}`}
+      >
+        {STEPS.map((step, i) => {
           const idx = ORDER.indexOf(step.status);
           const done = currentIdx >= idx;
+          const current = order.status === step.status;
+          // The connector below this step lights up once the NEXT step is reached.
+          const nextReached = i < STEPS.length - 1 && currentIdx >= ORDER.indexOf(STEPS[i + 1].status);
           return (
             <View key={step.status} style={styles.step}>
-              <View style={[styles.dot, done && styles.dotOn]}>
-                <Text style={styles.dotEmoji}>{done ? step.emoji : "•"}</Text>
+              <View style={styles.dotCol}>
+                <View style={[styles.dot, done && styles.dotOn, current && styles.dotCurrent]}>
+                  <Text style={styles.dotEmoji}>{done ? step.emoji : "•"}</Text>
+                </View>
+                {i < STEPS.length - 1 ? <View style={[styles.connector, nextReached && styles.connectorOn]} /> : null}
               </View>
-              <Text style={[styles.stepLabel, done && styles.stepLabelOn]}>{step.label}</Text>
+              <View style={styles.stepTextCol}>
+                <Text style={[styles.stepLabel, done && styles.stepLabelOn, current && styles.stepLabelCurrent]}>
+                  {step.label}
+                </Text>
+                {current ? <Text style={styles.stepNow}>In progress</Text> : null}
+              </View>
             </View>
           );
         })}
@@ -103,16 +161,44 @@ export default function OrderStatusScreen({ route }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg, padding: 20 },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
   number: { color: colors.text, fontSize: 28, fontWeight: "800", marginTop: 12 },
   muted: { color: colors.muted, fontSize: 14, marginTop: 4 },
-  steps: { marginTop: 36, gap: 22 },
-  step: { flexDirection: "row", alignItems: "center", gap: 16 },
-  dot: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.card, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: colors.line },
+
+  etaCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.line,
+    padding: 16,
+    marginTop: 20,
+  },
+  etaLabel: { color: colors.muted, fontSize: 13, fontWeight: "700", letterSpacing: 0.5, textTransform: "uppercase" },
+  etaValue: { color: colors.accent2, fontSize: 20, fontWeight: "800", marginTop: 6 },
+
+  steps: { marginTop: 28 },
+  step: { flexDirection: "row", alignItems: "flex-start", gap: 16 },
+  dotCol: { alignItems: "center" },
+  dot: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: colors.line,
+  },
   dotOn: { backgroundColor: colors.accent2, borderColor: colors.accent2 },
+  dotCurrent: { borderWidth: 2, borderColor: colors.accent },
   dotEmoji: { fontSize: 20 },
+  connector: { width: 2, height: 26, backgroundColor: colors.line, marginVertical: 2 },
+  connectorOn: { backgroundColor: colors.accent2 },
+  stepTextCol: { paddingTop: 10 },
   stepLabel: { color: colors.muted, fontSize: 18 },
   stepLabelOn: { color: colors.text, fontWeight: "700" },
+  stepLabelCurrent: { color: colors.accent2 },
+  stepNow: { color: colors.accent, fontSize: 13, fontWeight: "700", marginTop: 2 },
+
   ready: { color: colors.accent2, fontSize: 18, fontWeight: "800", marginTop: 28 },
   footer: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 16 },
   devNote: { color: colors.muted, fontSize: 12, lineHeight: 18 },

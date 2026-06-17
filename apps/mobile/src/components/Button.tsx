@@ -7,18 +7,26 @@ export function Button({
   disabled,
   loading,
   variant = "primary",
+  accessibilityLabel,
+  accessibilityHint,
 }: {
   title: string;
   onPress: () => void;
   disabled?: boolean;
   loading?: boolean;
   variant?: "primary" | "secondary";
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
 }) {
   const isDisabled = disabled || loading;
   return (
     <Pressable
       onPress={onPress}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={{ disabled: !!isDisabled, busy: !!loading }}
       style={({ pressed }) => [
         styles.base,
         variant === "primary" ? styles.primary : styles.secondary,
