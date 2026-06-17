@@ -16,8 +16,10 @@ brittle. The durable fix is a small data layer the owner edits from a web panel,
 which the backend applies to the live menu.
 
 **Status: the web panel + admin login are now built and working** (see below).
-What remains is durable persistence (KV/D1) and having the mobile app read the
-conditional overrides so the regex heuristic can be retired.
+Durable persistence (KV), prep-time → `pickup_at`, AND the mobile app reading
+conditional overrides are all **done**. The regex heuristic is now only a
+**fallback** — used solely when the owner has configured NO conditional rule on
+an item. What remains is moving deals behind the overrides store.
 
 ## How the owner opens it (quick start)
 
@@ -138,10 +140,10 @@ Per modifier GROUP (keyed by Square MODIFIER_LIST id):
 | `minSelections` / `maxSelections` | Clamp the group's min/max (e.g. bread = pick exactly 1). Explicit values win over `required`. |
 | `conditional` | A `ConditionalRule` — the group only shows once a trigger modifier in another group is selected. |
 
-### The conditional-modifier bridge (regex → data)
+### The conditional-modifier bridge (regex → data) — DONE, regex now a fallback
 
-`ConditionalRule` is the data shape that can eventually drive the SAME combo→drink
-behavior the app does with regex today:
+`ConditionalRule` is the data shape that drives the combo→drink behavior the app
+used to do with regex:
 
 ```ts
 conditional: {
@@ -151,30 +153,31 @@ conditional: {
 }
 ```
 
-`applyOverrides` attaches this to the group as an **additive** `__conditional`
-field (typed locally in `overrides.ts`, intentionally NOT in the contract
-`ModifierGroup` yet). The mobile app keeps its regex heuristic for now and
-ignores the field. The migration is deliberate and reviewed:
+This is now a **real contract field** — `ModifierGroup.conditional?` (additive,
+optional, in `contract/types.ts` + `openapi.yaml`). `applyOverrides` writes the
+panel's `ConditionalRule` straight onto `group.conditional` (the old
+`__conditional` local field is retired). The mobile app **prefers this data**:
 
-1. Promote `__conditional` onto the contract `ModifierGroup` type.
-2. Make `ItemDetailScreen` read `group.__conditional` when present, falling back
-   to the regex heuristic when absent.
-3. Author the real conditional rules in the panel, verify, then delete the regex.
+- `ItemDetailScreen` checks whether ANY group on the item carries
+  `conditional.hiddenUntilTriggered`. If so, visibility + auto-reveal are driven
+  entirely from the rule (`triggerModifierIds` / `triggerGroupIds`, or — when both
+  are empty — any selection in a non-conditional group).
+- When NO group has conditional data, it falls back to the legacy
+  `/drink/` + `/combo/` regex heuristic, so items the owner hasn't configured
+  behave exactly as before. The regex is now strictly a fallback.
+
+To make a combo data-driven: open the panel, mark the drink group "conditional"
+and pick the trigger group/modifier, Save. The app reveals that group from the
+rule; the regex is no longer consulted for that item.
 
 ## What remains to build
 
-~~KV / D1 persistence~~ and ~~Prep time → `pickup_at`~~ are now **done** — see
-"KV persistence (done)" and "Prep time → `pickup_at` (done)" above. Still open:
+~~KV / D1 persistence~~, ~~Prep time → `pickup_at`~~, and ~~mobile reads
+conditional overrides / regex retired (with fallback)~~ are now **done** — see
+"KV persistence (done)", "Prep time → `pickup_at` (done)", and the bridge section
+above. Still open:
 
-1. **Mobile reads the conditional overrides (retire the regex)** — the app
-   already gets overridden min/max/hidden/sold-out transparently through
-   `GET /menu` (applied server-side). The remaining work is consuming the
-   `__conditional` metadata to replace the `/drink/` + `/combo/` regex in
-   `ItemDetailScreen` — the owner can now author those rules in the panel:
-   promote `__conditional` onto the contract `ModifierGroup`, make
-   `ItemDetailScreen` read it (falling back to the regex when absent), then
-   delete the regex (see bridge above).
-2. **Deals into the panel** — `DealOverride` is a stub. Move the hard-coded deals
+1. **Deals into the panel** — `DealOverride` is a stub. Move the hard-coded deals
    in `menu.ts getDeals()` behind the overrides store so the owner edits them.
    (The panel currently edits items/groups only.)
 

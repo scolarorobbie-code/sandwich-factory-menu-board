@@ -95,9 +95,10 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
 4. **EAS dev build** — the gate for testing what Expo Go can't: real Square
    In-App Payments AND real push delivery. Needs his Expo + Apple accounts.
    Path: `npx testflight` (build + submit in one step) once configured.
-5. **Control panel — remaining:** mobile reading `__conditional` overrides to
-   retire the regex heuristic; move deals behind the overrides store. (KV
-   persistence + prep-time→pickup_at are DONE.) See `docs/CONTROL_PANEL.md`.
+5. **Control panel — remaining:** move deals behind the overrides store. (KV
+   persistence, prep-time→pickup_at, AND mobile reading conditional overrides —
+   `ModifierGroup.conditional` is now a contract field; the app prefers it and the
+   regex is only a fallback — are DONE.) See `docs/CONTROL_PANEL.md`.
 6. **Loyalty — to actually test Stars:** sandbox needs an ACTIVE loyalty program
    configured; loyalty maps by phone (now captured at sign-up).
 7. **Work the competitive punch-list** in `docs/COMPETITIVE_ANALYSIS.md`.

@@ -486,6 +486,13 @@ components:
         modifiers:
           type: array
           items: { $ref: "#/components/schemas/Modifier" }
+        conditional:
+          allOf: [{ $ref: "#/components/schemas/ConditionalRule" }]
+          description: >
+            Optional, additive. Set by the merchant control panel's override
+            layer. When present the group is hidden until a trigger selection is
+            made (data-driven combo→drink reveal). Absent on most groups; the app
+            falls back to its regex heuristic only when NO group carries this.
 
     Modifier:
       type: object

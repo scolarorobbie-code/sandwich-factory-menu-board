@@ -1,9 +1,9 @@
 import type {
-  ConditionalRule,
   GroupOverride,
   ItemOverride,
   Menu,
   MenuOverrides,
+  ModifierGroup,
   PutOverridesRequest,
 } from "@sf/contract";
 import type { Env } from "./env";
@@ -103,10 +103,11 @@ export const overridesStore = {
  *   when it already marked something sold out — we only ever take availability
  *   away, never add it back).
  * - Per-group required/min/max are clamped onto the matching modifier group.
- * - Conditional rules are attached to the group via `__conditional` metadata so
- *   the app can eventually drive the combo→drink reveal from data instead of the
- *   regex heuristic. (Additive: the contract `ModifierGroup` is unchanged; the
- *   app reads this opt-in field when it's ready, ignores it until then.)
+ * - Conditional rules are written to the group's contract `conditional` field so
+ *   the app drives the combo→drink reveal from DATA instead of the regex
+ *   heuristic. (Additive contract field `ModifierGroup.conditional?`: the app
+ *   prefers it when present and falls back to the regex only when NO group on the
+ *   item carries one.)
  *
  * `prepTimeMinutes` is NOT applied here — it feeds Square order `pickup_at` at
  * order-create time, not the menu. orders.ts reads it from the override doc via
@@ -132,12 +133,14 @@ export function applyOverrides(menu: Menu, overrides: MenuOverrides): Menu {
           if (!go) return group;
           const min = go.minSelections ?? (go.required === true ? Math.max(1, group.minSelections) : go.required === false ? 0 : group.minSelections);
           const max = go.maxSelections ?? group.maxSelections;
-          const next: ModifierGroupWithMeta = {
+          const next: ModifierGroup = {
             ...group,
             minSelections: min,
             maxSelections: Math.max(max, min),
           };
-          if (go.conditional) next.__conditional = go.conditional;
+          // Promote the panel's ConditionalRule onto the CONTRACT field so the app
+          // can drive combo→drink visibility from data (not its regex heuristic).
+          if (go.conditional) next.conditional = go.conditional;
           return next;
         });
 
@@ -152,16 +155,6 @@ export function applyOverrides(menu: Menu, overrides: MenuOverrides): Menu {
 
   return { ...menu, categories };
 }
-
-/**
- * The app-facing `ModifierGroup` plus the optional, additive conditional
- * metadata the override layer attaches. Declared here (not in the contract) so
- * the contract stays minimal until the app actually consumes it; when the app
- * reads it, promote `__conditional` into the contract `ModifierGroup`.
- */
-type ModifierGroupWithMeta = Menu["categories"][number]["items"][number]["modifierGroups"][number] & {
-  __conditional?: ConditionalRule;
-};
 
 // ---------------------------------------------------------------------------
 // Prep time → Square order `pickup_at`

@@ -93,6 +93,15 @@ export interface ModifierGroup {
   minSelections: number; // 0 = optional
   maxSelections: number; // 1 = single-select; >1 = multi-select
   modifiers: Modifier[];
+  /**
+   * Optional, additive. When present (set by the merchant control panel's
+   * override layer from a `ConditionalRule`), the group is hidden until a
+   * trigger selection is made — the data-driven version of the app's combo→drink
+   * regex heuristic. Absent for most groups; the app falls back to the regex
+   * heuristic only when NO group on the item carries this field. See
+   * `ConditionalRule` below.
+   */
+  conditional?: ConditionalRule;
 }
 
 export interface Modifier {
