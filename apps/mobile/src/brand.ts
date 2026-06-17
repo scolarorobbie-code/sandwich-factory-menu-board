@@ -81,24 +81,15 @@ export const logo = {
 // ── Color palette ────────────────────────────────────────────────────────────
 
 /**
- * PLACEHOLDER premium dark palette — moved here VERBATIM from theme.ts (values
- * originally lifted from the in-store menu boards, tv-*.html). These are the
- * default until the owner's real brand colors arrive.
+ * PLACEHOLDER premium dark palette. The hex values now live VERBATIM in the
+ * sibling RN-free module `src/palette.ts` and are re-exported here, so every
+ * existing `import { palette } from "./brand"` keeps working unchanged — same
+ * object, same values. The split exists only so the palette can be imported
+ * without evaluating this file's logo-asset `require` above (which resolves
+ * only under the Expo/Metro bundler, not in a plain Node/vitest run).
  *
  * REPLACE the hex values when real colors land, but KEEP THE KEYS — theme.ts
  * maps these 1:1 into the `colors` object that every screen imports, so the
  * keys are a contract. Do not rename them.
  */
-export const palette = {
-  bg: "#0e0a08", // app background — warm near-black (brown/red undertone)
-  bg2: "#17100d", // raised surfaces: headers, tab bar, pill bar
-  card: "#201712", // cards / secondary buttons (warm charcoal)
-  line: "rgba(244,236,215,0.10)", // cream-tinted hairline borders / dividers
-  accent: "#c0392b", // SANDWICH FACTORY brand red (from the logo) — CTAs, cart bar
-  accent2: "#e0a33c", // warm golden (toasted-bread highlight) — prices, headings, active pills
-  text: "#f4ecd7", // warm cream (the logo cream) — primary text on dark
-  muted: "#b7a892", // warm taupe — secondary / muted text
-  cyan: "#7fc8c0", // sparing cool accent (hints), warmed to sit with the brand
-} as const;
-
-export type Palette = typeof palette;
+export { palette, type Palette } from "./palette";
