@@ -25,9 +25,25 @@ SQUARE_API_VERSION = "2026-01-22"
 SQUARE_LOCATION_ID = ""
 SQUARE_APPLICATION_ID = ""
 
+# --- KV namespaces ---
+# Local `wrangler dev` provides a SIMULATED KV for each binding automatically, so
+# you do NOT need to create these to develop locally — overrides already persist
+# in the dev simulator and reset only if you wipe `.wrangler/`. Create the real
+# namespaces (and paste the returned ids) before `wrangler deploy` so production
+# data is durable.
+
 # Idempotency + webhook de-dupe storage. Create with:
-#   wrangler kv namespace create IDEMPOTENCY
+#   cd services/backend && npx wrangler kv namespace create IDEMPOTENCY
 # then paste the returned id below.
 # [[kv_namespaces]]
 # binding = "IDEMPOTENCY"
+# id = "<your-kv-namespace-id>"
+
+# Merchant control-panel menu overrides (hide/sold-out, required/min/max,
+# conditional rules, prep time). Without this binding the overrides live only in
+# the Worker's memory and reset on every restart/redeploy. Create with:
+#   cd services/backend && npx wrangler kv namespace create OVERRIDES
+# then paste the returned id below.
+# [[kv_namespaces]]
+# binding = "OVERRIDES"
 # id = "<your-kv-namespace-id>"

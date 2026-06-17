@@ -85,7 +85,7 @@ export async function adminLogin(req: Request, env: Env): Promise<Response> {
 export async function getOverrides(req: Request, env: Env): Promise<Response> {
   const ok = await authorizeAdmin(req, env);
   if (ok !== true) return ok;
-  return json(overridesStore.get());
+  return json(await overridesStore.get(env));
 }
 
 export async function putOverrides(req: Request, env: Env): Promise<Response> {
@@ -101,5 +101,5 @@ export async function putOverrides(req: Request, env: Env): Promise<Response> {
   if (!body || typeof body !== "object" || typeof body.items !== "object" || body.items === null) {
     return error("VALIDATION_FAILED", "Expected { items: { [itemId]: ItemOverride }, deals? }", 422);
   }
-  return json(overridesStore.put(body));
+  return json(await overridesStore.put(env, body));
 }
