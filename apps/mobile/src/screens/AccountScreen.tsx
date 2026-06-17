@@ -143,9 +143,22 @@ export default function AccountScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
-      <Text style={styles.hello} onLongPress={makeStaffTablet}>
-        Hi, {customer.firstName} 👋
-      </Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.hello} onLongPress={makeStaffTablet}>
+          Hi, {customer.firstName} 👋
+        </Text>
+        <Pressable
+          style={styles.settingsBtn}
+          onPress={() => nav.navigate("Settings")}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
+          accessibilityHint="Notifications and profile"
+        >
+          <Text style={styles.settingsIcon}>⚙︎</Text>
+          <Text style={styles.settingsText}>Settings</Text>
+        </Pressable>
+      </View>
 
       <View style={styles.starCard} accessibilityLabel={`${loyalty?.stars ?? 0} Stars`}>
         <Text style={styles.starCount}>⭐ {loyalty?.stars ?? 0}</Text>
@@ -251,7 +264,11 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   signedOut: { flex: 1, backgroundColor: colors.bg, padding: 24, justifyContent: "center" },
   title: { color: colors.text, fontSize: 24, fontWeight: "800" },
-  hello: { color: colors.text, fontSize: 26, fontWeight: "800" },
+  headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  hello: { color: colors.text, fontSize: 26, fontWeight: "800", flex: 1 },
+  settingsBtn: { flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 10, marginLeft: 10 },
+  settingsIcon: { color: colors.accent2, fontSize: 18, marginRight: 5 },
+  settingsText: { color: colors.accent2, fontSize: 15, fontWeight: "700" },
   muted: { color: colors.muted, fontSize: 15, marginTop: 8, lineHeight: 21 },
   starCard: { backgroundColor: colors.card, borderRadius: 18, padding: 22, marginTop: 20, borderWidth: 1, borderColor: colors.line, alignItems: "center" },
   starCount: { color: colors.accent2, fontSize: 44, fontWeight: "900" },

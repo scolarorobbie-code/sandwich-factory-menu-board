@@ -13,6 +13,8 @@ interface AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, firstName: string, phone?: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Replace the in-memory customer after a profile update (PATCH /me). */
+  updateCustomer: (customer: Customer) => void;
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -78,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signUp: async (email, password, firstName, phone) =>
         applyAuth(await api.register({ email, password, firstName, phone })),
       signOut: clearTokens,
+      updateCustomer: setCustomer,
     }),
     [customer, loading],
   );

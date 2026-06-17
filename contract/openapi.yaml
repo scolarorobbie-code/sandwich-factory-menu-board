@@ -139,6 +139,26 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Customer" }
         "401": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Auth]
+      summary: Update the signed-in customer's profile (name / phone)
+      description: >
+        Additive partial update. Only the provided fields change. Email/identity
+        are not editable here. Phone lets Apple Sign-In users (who have none) add
+        one so they can map into Square Loyalty.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateProfileRequest" }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
 
   /orders:
     get:
@@ -670,6 +690,16 @@ components:
         lastName: { type: string }
         phone: { type: string }
         createdAt: { type: string, format: date-time }
+
+    UpdateProfileRequest:
+      type: object
+      description: >
+        Partial profile update for PATCH /me. All fields optional; only supplied
+        fields change. Phone lets Apple Sign-In users add one for Square Loyalty.
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string, description: "E.164, used to map into Square Loyalty" }
 
     Loyalty:
       type: object

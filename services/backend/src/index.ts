@@ -2,7 +2,7 @@ import type { Health } from "@sf/contract";
 import { addFavorite, getLoyalty, listFavorites, registerDevice, removeFavorite } from "./account";
 import { adminLogin, getOverrides, putOverrides } from "./admin";
 import adminHtml from "../public/admin.html";
-import { appleAuth, login, me, refresh, register, requireAuth } from "./auth";
+import { appleAuth, login, me, refresh, register, requireAuth, updateProfile } from "./auth";
 import type { Env } from "./env";
 import { getDeals, getMenu } from "./menu";
 import { createOrder, getOrder, listOrders } from "./orders";
@@ -69,6 +69,7 @@ export default {
       }
 
       if (pathname === "/me" && method === "GET") return await me(req, env);
+      if (pathname === "/me" && method === "PATCH") return await updateProfile(req, env, user!);
 
       if (pathname === "/orders" && method === "GET") return listOrders(user!);
       if (pathname === "/orders" && method === "POST") return await createOrder(req, env, user!);

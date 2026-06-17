@@ -13,6 +13,7 @@ import DealsScreen from "../screens/DealsScreen";
 import ItemDetailScreen from "../screens/ItemDetailScreen";
 import MenuScreen from "../screens/MenuScreen";
 import OrderStatusScreen from "../screens/OrderStatusScreen";
+import SettingsScreen from "../screens/SettingsScreen";
 import type { RootStackParamList, TabParamList } from "./types";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -74,6 +75,7 @@ export default function RootNavigator() {
         <Stack.Screen name="Auth" component={AuthScreen} options={{ title: "Sign In" }} />
         <Stack.Screen name="Checkout" component={CheckoutScreen} options={{ title: "Checkout" }} />
         <Stack.Screen name="OrderStatus" component={OrderStatusScreen} options={{ title: "Order Status" }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

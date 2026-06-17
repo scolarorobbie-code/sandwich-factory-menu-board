@@ -1,7 +1,7 @@
 import type { Order, OrderStatus } from "@sf/contract";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useRef, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { api } from "../api/client";
 import { Button } from "../components/Button";
 import { Skeleton } from "../components/Skeleton";
@@ -41,7 +41,7 @@ function etaCopy(order: Order): string | null {
 }
 
 export default function OrderStatusScreen({ route }: Props) {
-  const { orderId } = route.params;
+  const { orderId, receiptUrl } = route.params;
   const [order, setOrder] = useState<Order | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -140,6 +140,18 @@ export default function OrderStatusScreen({ route }: Props) {
       {order.status === "READY" && <Text style={styles.ready}>🎉 Come grab it at the counter!</Text>}
       {order.status === "COMPLETED" && <Text style={styles.ready}>Thanks for stopping by!</Text>}
 
+      {receiptUrl ? (
+        <Pressable
+          style={styles.receiptBtn}
+          onPress={() => Linking.openURL(receiptUrl).catch(() => {})}
+          accessibilityRole="link"
+          accessibilityLabel="View receipt"
+          accessibilityHint="Opens your Square receipt in the browser"
+        >
+          <Text style={styles.receiptText}>🧾 View receipt</Text>
+        </Pressable>
+      ) : null}
+
       <View style={{ flex: 1 }} />
 
       <View style={styles.footer}>
@@ -200,6 +212,8 @@ const styles = StyleSheet.create({
   stepNow: { color: colors.accent, fontSize: 13, fontWeight: "700", marginTop: 2 },
 
   ready: { color: colors.accent2, fontSize: 18, fontWeight: "800", marginTop: 28 },
+  receiptBtn: { marginTop: 24, alignSelf: "flex-start", paddingVertical: 8 },
+  receiptText: { color: colors.accent2, fontSize: 16, fontWeight: "700", textDecorationLine: "underline" },
   footer: { borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 16 },
   devNote: { color: colors.muted, fontSize: 12, lineHeight: 18 },
 });

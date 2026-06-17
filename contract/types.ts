@@ -260,6 +260,19 @@ export interface Customer {
   createdAt: Timestamp;
 }
 
+/**
+ * PATCH /me — update the signed-in customer's editable profile fields. Additive;
+ * all fields optional, only the provided ones are changed. Email and identity are
+ * NOT editable here. Phone matters: Apple Sign-In users have none, which blocks
+ * Square Loyalty (mapped by phone) — this lets them add it.
+ */
+export interface UpdateProfileRequest {
+  firstName?: string;
+  lastName?: string;
+  /** E.164, used to map the customer into Square Loyalty (Stars). */
+  phone?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Loyalty (Square Loyalty API; branding = "Stars")
 // ---------------------------------------------------------------------------

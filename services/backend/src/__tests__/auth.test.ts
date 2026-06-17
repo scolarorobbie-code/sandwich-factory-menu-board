@@ -7,6 +7,7 @@ import {
   register,
   signJwt,
   timingSafeEqual,
+  updateProfile,
   verifyJwt,
   type JwtClaims,
 } from "../auth";
@@ -273,5 +274,65 @@ describe("me + refresh", () => {
       env,
     );
     expect(res.status).toBe(401);
+  });
+});
+
+describe("updateProfile (PATCH /me)", () => {
+  beforeEach(() => store.reset());
+
+  async function registerStored(): Promise<{ env: ReturnType<typeof mockEnv>; user: NonNullable<ReturnType<typeof store.getUser>> }> {
+    const env = mockEnv({ JWT_SIGNING_SECRET: SECRET });
+    const reg = await register(
+      jsonRequest("https://api.test/auth/register", {
+        email: "pat@example.com",
+        password: "supersecret",
+        firstName: "Pat",
+      }),
+      env,
+    );
+    const body = (await reg.json()) as AuthResponse;
+    const user = store.getUser(body.customer.id)!;
+    return { env, user };
+  }
+
+  function patch(body: unknown): Request {
+    return new Request("https://api.test/me", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+
+  it("updates name and phone, persisting to the store", async () => {
+    const { env, user } = await registerStored();
+    const res = await updateProfile(patch({ firstName: "Patricia", phone: "(615) 494-1211" }), env, user);
+    expect(res.status).toBe(200);
+    const out = (await res.json()) as Customer;
+    expect(out.firstName).toBe("Patricia");
+    expect(out.phone).toBe("(615) 494-1211");
+    // Persisted: a fresh read of the user reflects the change.
+    expect(store.getUser(user.customer.id)?.customer.phone).toBe("(615) 494-1211");
+  });
+
+  it("leaves unspecified fields unchanged", async () => {
+    const { env, user } = await registerStored();
+    const res = await updateProfile(patch({ phone: "615-555-0100" }), env, user);
+    const out = (await res.json()) as Customer;
+    expect(out.firstName).toBe("Pat"); // untouched
+    expect(out.phone).toBe("615-555-0100");
+  });
+
+  it("rejects an empty first name and an invalid phone", async () => {
+    const { env, user } = await registerStored();
+    expect((await updateProfile(patch({ firstName: "  " }), env, user)).status).toBe(422);
+    expect((await updateProfile(patch({ phone: "abc" }), env, user)).status).toBe(422);
+  });
+
+  it("clears phone when sent an empty string", async () => {
+    const { env, user } = await registerStored();
+    await updateProfile(patch({ phone: "615-555-0100" }), env, user);
+    const res = await updateProfile(patch({ phone: "" }), env, user);
+    const out = (await res.json()) as Customer;
+    expect(out.phone).toBeUndefined();
   });
 });
