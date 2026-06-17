@@ -208,17 +208,174 @@ Before a production build: flip `squareApplicationId` / `squareEnvironment` in
 
 ---
 
-## Android (later — Phase 3)
+## Android — full runbook (Phase 3)
 
-The same package works on Android. When you get there:
+Android ships from the **SAME** codebase as iOS — there is no second Android
+project (CLAUDE.md hard rule #5). Everything you built and tested on iPhone works
+on Android once you do the Android-specific setup below.
+
+> **What's already done in the code (you don't touch it):**
+> - `app.json` has the Android block: `android.package`
+>   (`com.scolaroenterprises.sandwichfactory`), `versionCode`, the adaptive icon,
+>   a **minimal** permission list (`INTERNET`, `POST_NOTIFICATIONS`, `VIBRATE`)
+>   plus a `blockedPermissions` list so EAS won't silently add camera/location/
+>   storage permissions you don't use (those can trigger Play Store review
+>   questions).
+> - The `expo-build-properties` plugin sets Android **`minSdkVersion: 24`** —
+>   the minimum Square's In-App Payments Android SDK requires.
+> - `eas.json` builds Android in all three profiles: **APK** for `development`
+>   and `preview` (an APK installs directly on a phone), **AAB** (app bundle) for
+>   `production` (what Google Play requires for submission).
+> - The notification **channel** is created in code at app launch
+>   (`apps/mobile/src/push.ts` → `setupNotifications()` → `ensureAndroidChannel()`).
+>   Android needs a channel or it drops notifications; ours uses HIGH importance
+>   with sound + vibration so order alerts pop. This is crash-proof and no-ops on
+>   iOS.
+
+### What only YOU can do (needs YOUR Google / Firebase accounts)
+
+Android push notifications go through Google's **FCM** (Firebase Cloud
+Messaging) the way iOS push goes through Apple's APNs. Expo can't mint Android
+push tokens without FCM credentials tied to your Google account. So:
+
+**A. Create a Firebase project + get `google-services.json` (one time)**
+
+1. Go to <https://console.firebase.google.com> and sign in with the Google
+   account you want to own this (can be the store's Google account).
+2. Click **Add project**, name it (e.g. "Sandwich Factory"), finish the wizard.
+3. In the project, click the **Android** icon to "Add an app".
+4. For **Android package name** enter EXACTLY:
+   `com.scolaroenterprises.sandwichfactory` (must match `app.json`).
+5. Download the **`google-services.json`** file it gives you.
+6. Put that file somewhere in `apps/mobile/` (e.g. `apps/mobile/google-services.json`)
+   and point `app.json` at it by adding this line inside the `"android"` block:
+
+   ```jsonc
+   "android": {
+     "package": "com.scolaroenterprises.sandwichfactory",
+     "googleServicesFile": "./google-services.json",
+     ...
+   }
+   ```
+
+   > ⚠️ **Do NOT commit `google-services.json`** — it's tied to your Firebase
+   > project. Add it to `.gitignore`. (It is not a high-value secret, but it
+   > shouldn't live in the repo.)
+
+**B. Give Expo the FCM key so it can deliver pushes**
+
+Expo needs the Firebase **server credential** to send to your devices:
+
+1. In the Firebase console: **Project settings → Cloud Messaging**.
+2. Under **Firebase Cloud Messaging API (V1)**, generate / download a
+   **service-account JSON key** (Google Cloud → Service accounts → "Firebase
+   Adminsdk" → Keys → Add key → JSON).
+3. Upload it to Expo so EAS can push for you:
+
+   ```bash
+   cd apps/mobile
+   eas credentials            # choose Android → FCM V1 → upload the JSON key
+   ```
+
+That's it for FCM. After this, the EXACT same push code that works on iPhone
+(`order.created` → staff tablet, `order.updated` → customer "ready for pickup")
+delivers to Android phones too.
+
+### Build + install on an Android phone
+
+You need the Square card SDK and `expo-build-properties` installed the same way
+as iOS (Step 2 above). If you haven't already:
 
 ```bash
+cd apps/mobile
+npx expo install react-native-square-in-app-payments
+npx expo install expo-build-properties     # REQUIRED — app.json references this plugin
+```
+
+> Note: `expo-build-properties` is referenced by `app.json` but is intentionally
+> not in `package.json` yet (so a plain `npm install` can't break for someone who
+> isn't building). The first `eas build` / `expo prebuild` will fail with a clear
+> "plugin not found" message if you skip the `expo install` line above — just run
+> it and rebuild.
+
+Then build the Android dev client and install it:
+
+```bash
+cd apps/mobile
 eas build --profile development --platform android
 ```
 
-Square's Android SDK needs `minSdkVersion` 24+; add it to the same
-`expo-build-properties` block under `"android": { "minSdkVersion": 24 }` if a
-build complains. Otherwise the flow is identical.
+- EAS builds in the cloud and gives you a link / QR code.
+- Open it **on the Android phone** and tap to install the **APK** (Android may
+  warn about "installing from an unknown source" — allow it for this once).
+- Start the bundler and load your code into the installed dev client:
+
+  ```bash
+  npx expo start --dev-client
+  ```
+
+- Point the app at your backend with `EXPO_PUBLIC_API_BASE_URL` (your LAN IP like
+  `http://192.168.1.20:8787`, or your deployed Worker URL) — same as iOS.
+
+Test the same flow as iOS Step 4: browse → add item → checkout → **Pay** brings
+up Square's native card form, enter the sandbox test card (`4111 1111 1111 1111`,
+exp `12/27`, CVV `111`, ZIP `94103`). Card tokenizes on-device; only the token
+reaches the backend.
+
+For a shareable test build (no Metro bundler needed, installs standalone):
+
+```bash
+eas build --profile preview --platform android   # also an APK
+```
+
+### Submit to Google Play (when ready to ship)
+
+1. Create a **Google Play Console** account (one-time ~$25 fee) at
+   <https://play.google.com/console> with your Google account.
+2. Create the app listing there (name, screenshots, privacy policy, etc.).
+3. Build the production **app bundle** and submit:
+
+   ```bash
+   cd apps/mobile
+   eas build --profile production --platform android   # builds an .aab
+   eas submit --profile production --platform android  # uploads to Play
+   ```
+
+   `eas submit` will ask for a Google Play **service-account JSON** the first
+   time (Play Console → Setup → API access) so it can upload on your behalf;
+   EAS walks you through it.
+
+Before a production build, flip `app.json` → `expo.extra.squareApplicationId` /
+`squareEnvironment` to your **production** Square values (same as iOS), and make
+sure the backend has production Square credentials.
+
+### Android gotchas to know
+
+- **Permissions are deliberately minimal.** If a future native dependency needs a
+  permission, add it to `android.permissions` in `app.json` (and remove it from
+  `blockedPermissions`). Don't add permissions you don't use — Play review
+  flags unexplained ones.
+- **`versionCode`** must increase on every Play upload. The production profile
+  uses `autoIncrement` in `eas.json`, so EAS bumps it for you; the `versionCode`
+  in `app.json` is just the starting value.
+- **Notification channel:** already handled in code. If you ever want a separate
+  sound/importance for staff vs. customer alerts, add a second channel in
+  `apps/mobile/src/push.ts` — the helper is structured for it.
+
+### iOS-only code paths checked for Android safety
+
+A pass over the app for iOS-only APIs that would crash Android found everything
+already guarded:
+
+- `Alert.prompt` (iOS-only) in `ItemDetailScreen.tsx` (favorite naming) is wrapped
+  in `typeof Alert.prompt === "function"` and falls back to saving with the item
+  name on Android — safe.
+- The native wrappers (`push.ts`, `haptics.ts`, `payments/squarePayments.ts`) all
+  handle `Platform.OS === "android"` explicitly and lazy-load native modules in
+  try/catch — safe.
+
+No screen code needed changes for Android. (See the owner report / commit message
+for any follow-ups flagged to the screen-owning agent.)
 
 ---
 
