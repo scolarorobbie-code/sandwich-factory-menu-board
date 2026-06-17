@@ -98,7 +98,7 @@ export async function fetchLiveMenu(env: Env): Promise<Menu> {
  * Picks a keyword from the item name so the stand-in is on-theme, with a stable
  * per-item variation. Real Square photos always take precedence.
  */
-function placeholderImage(name: string, seed: string): string {
+export function placeholderImage(name: string, seed: string): string {
   const n = name.toLowerCase();
   const kw = /burger/.test(n)
     ? "burger"
@@ -147,16 +147,16 @@ function mapItem(
 }
 
 /** Many merchants prefix modifier-group names with "1.", "2." to force order. */
-function leadingNumber(name: string): number {
+export function leadingNumber(name: string): number {
   const m = name.match(/^\s*(\d+)/);
   return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
 }
 /** Strip a leading "3. " / "3) " / "3 - " so customers see a clean name. */
-function cleanName(name: string): string {
+export function cleanName(name: string): string {
   return name.replace(/^\s*\d+\s*[.)\-:]\s*/, "").trim() || name;
 }
 
-function mapModifierGroups(
+export function mapModifierGroups(
   info: SquareModifierListInfo[],
   modifierLists: Map<string, SquareObject>,
 ): ModifierGroup[] {
@@ -338,7 +338,7 @@ interface SquareCatalogResponse {
   related_objects?: SquareObject[];
   cursor?: string;
 }
-interface SquareObject {
+export interface SquareObject {
   id: string;
   type: string;
   is_deleted?: boolean;
@@ -361,7 +361,7 @@ interface SquareObject {
   };
   item_variation_data?: { name?: string; price_money?: { amount?: number } };
 }
-interface SquareModifierListInfo {
+export interface SquareModifierListInfo {
   modifier_list_id: string;
   enabled?: boolean;
   min_selected_modifiers?: number;

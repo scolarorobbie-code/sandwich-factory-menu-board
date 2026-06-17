@@ -67,6 +67,26 @@ export interface LoyaltySnapshot {
 }
 
 /**
+ * Pure reward-tier selection: pick the most valuable reward the customer can
+ * actually afford. A tier is affordable when its `cost` is positive AND fits
+ * both the live `balance` and the `redeemCap` the customer chose to spend.
+ * Returns the highest-cost affordable tier, or null when none fits (e.g. the
+ * balance is below the cheapest tier). Extracted so it can be unit-tested
+ * without the Square API round-trips around it.
+ */
+export function bestAffordableReward(
+  rewards: LoyaltyReward[],
+  balance: number,
+  redeemCap: number,
+): LoyaltyReward | null {
+  return (
+    rewards
+      .filter((r) => r.cost > 0 && r.cost <= balance && r.cost <= redeemCap)
+      .sort((a, b) => b.cost - a.cost)[0] ?? null
+  );
+}
+
+/**
  * Fetch the merchant's loyalty program. Returns null when there is no ACTIVE
  * program (e.g. a bare sandbox) so callers fall back to "no loyalty".
  */

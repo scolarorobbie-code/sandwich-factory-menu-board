@@ -82,4 +82,18 @@ export const store = {
   // --- webhook de-dupe fallback (KV preferred when present) ---
   seenEvent: (id: string) => seenEvents.has(id),
   markEvent: (id: string) => void seenEvents.add(id),
+
+  /**
+   * Test/dev reset of all in-memory state. Production never calls this (the
+   * backing store is KV/D1); it exists so unit tests start from a clean slate.
+   */
+  reset() {
+    usersById.clear();
+    usersByEmail.clear();
+    ordersById.clear();
+    ordersByUser.clear();
+    favoritesByUser.clear();
+    seenEvents.clear();
+    orderSeq = 1042;
+  },
 };

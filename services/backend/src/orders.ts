@@ -11,6 +11,7 @@ import type {
 import type { Env } from "./env";
 import { isLive } from "./env";
 import {
+  bestAffordableReward,
   findOrCreateLoyaltyAccount,
   getAccountBalance,
   getLoyaltyProgram,
@@ -43,7 +44,7 @@ function findItem(menu: Menu, itemId: string): MenuItem | undefined {
 }
 
 /** Price a single cart line against the menu. Throws a message on bad input. */
-function priceLine(menu: Menu, line: CartLineItem): OrderLineItem {
+export function priceLine(menu: Menu, line: CartLineItem): OrderLineItem {
   const item = findItem(menu, line.itemId);
   if (!item) throw new Error(`Unknown item: ${line.itemId}`);
   if (!item.available) throw new Error(`${item.name} is unavailable`);
@@ -233,9 +234,7 @@ async function applyLoyaltyRedemption(
 
     // Affordable tiers: cost <= live balance AND <= what the customer chose to
     // spend (`redeemCap`). Pick the highest-cost tier that fits.
-    const tier = program.rewards
-      .filter((r) => r.cost > 0 && r.cost <= balance && r.cost <= redeemCap)
-      .sort((a, b) => b.cost - a.cost)[0];
+    const tier = bestAffordableReward(program.rewards, balance, redeemCap);
     if (!tier) return false;
 
     const result = await redeemReward(env, accountId, tier.id, squareOrderId, `redeem-${idempotencyKey}`);
