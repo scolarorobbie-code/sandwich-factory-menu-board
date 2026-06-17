@@ -315,6 +315,14 @@ export interface RegisterDeviceRequest {
   /** ExponentPushToken[...] from expo-notifications. */
   expoPushToken: string;
   platform: "ios" | "android";
+  /**
+   * When true, register this device as the STAFF / store tablet so it receives
+   * new-order alerts instead of customer status pushes. The owner sets the store
+   * tablet via this flag (the device must be signed in, then toggled to staff in
+   * the app) or, alternatively, via the backend STAFF_PUSH_TOKEN env var.
+   * Omitted/false = a normal customer device. Additive; defaults to false.
+   */
+  staff?: boolean;
 }
 
 // ---------------------------------------------------------------------------

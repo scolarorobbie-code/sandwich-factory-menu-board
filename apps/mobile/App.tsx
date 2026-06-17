@@ -1,7 +1,9 @@
 import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import RootNavigator from "./src/navigation/RootNavigator";
+import { setupNotifications } from "./src/push";
 import { AuthProvider, useAuth } from "./src/state/auth";
 import { CartProvider } from "./src/state/cart";
 import { colors } from "./src/theme";
@@ -19,6 +21,13 @@ function Gate() {
 }
 
 export default function App() {
+  // Install the foreground notification handler once at launch so pushes render
+  // while the app is open (independent of sign-in). Crash-proof / no-op on web
+  // + Expo Go.
+  useEffect(() => {
+    setupNotifications();
+  }, []);
+
   return (
     <SafeAreaProvider>
       <StatusBar style="light" />

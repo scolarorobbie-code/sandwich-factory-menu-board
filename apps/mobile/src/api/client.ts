@@ -97,6 +97,6 @@ export const api = {
     request<Favorite>("POST", "/favorites", { body, auth: true }),
   deleteFavorite: (id: string) =>
     request<void>("DELETE", `/favorites/${id}`, { auth: true }),
-  registerDevice: (expoPushToken: string, platform: "ios" | "android") =>
-    request<void>("POST", "/devices", { body: { expoPushToken, platform }, auth: true }),
+  registerDevice: (expoPushToken: string, platform: "ios" | "android", staff = false) =>
+    request<void>("POST", "/devices", { body: { expoPushToken, platform, staff }, auth: true }),
 };

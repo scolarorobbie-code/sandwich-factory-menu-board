@@ -68,6 +68,16 @@ export async function registerDevice(req: Request, _env: Env, user: StoredUser):
   if (!body.expoPushToken || !body.platform) {
     return error("VALIDATION_FAILED", "expoPushToken and platform required", 422);
   }
+
+  if (body.staff) {
+    // STAFF / store-tablet device: gets NEW-ORDER alerts, kept separate from
+    // customer status pushes. Registering as staff doesn't also subscribe the
+    // device to that user's order-status pushes.
+    store.addStaffToken({ token: body.expoPushToken, platform: body.platform });
+    return noContent();
+  }
+
+  // Normal CUSTOMER device: gets order-status pushes for this user's orders.
   const existing = user.pushTokens.find((t) => t.token === body.expoPushToken);
   if (!existing) {
     user.pushTokens.push({ token: body.expoPushToken, platform: body.platform });

@@ -723,6 +723,13 @@ components:
       properties:
         expoPushToken: { type: string }
         platform: { type: string, enum: [ios, android] }
+        staff:
+          type: boolean
+          default: false
+          description: >-
+            When true, register this device as the staff/store tablet (receives
+            new-order alerts) instead of a customer device (receives order-status
+            pushes). Additive; defaults to false.
 
     SquareWebhookEvent:
       type: object
