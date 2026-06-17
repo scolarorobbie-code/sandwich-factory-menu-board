@@ -105,6 +105,19 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   timeline, unified friendly empty/error states, and an **accessibility pass**
   (labels/roles/hints, ≥44pt targets) for App-Store quality.
 
+## Landed in the FOURTH pass (2026-06-17, all merged, green, pushed)
+- **Square In-App Payments SCAFFOLDED** (the CLAUDE.md key constraint) — card
+  tokenization now goes through `apps/mobile/src/payments/squarePayments.ts`, a
+  crash-proof abstraction (lazy-require, like haptics/push). Expo Go is UNCHANGED
+  (still the sandbox test nonce); a real EAS build presents Square's native card
+  form. The native dep is deliberately NOT in package.json (so `npm install` can't
+  break) — it's installed during the EAS build, per **`docs/EAS_AND_PAYMENTS.md`**
+  (the runbook). Added `eas.json` (dev/preview/production) + public app id in
+  `app.json` extra. Backend already accepted the verification token — no change.
+- **"Your usual" on the Menu home** — signed-in users see favorites (quick add) +
+  a one-tap "reorder last order" row at the top of the Menu (hidden during search,
+  renders nothing for new/signed-out users). Reuses the existing reorder helper.
+
 ## Decisions (owner-confirmed)
 - Photos: real Square + AI fallback. Brand: **match website** (awaiting his logo +
   colors — site is bot-blocked, he must send the image). Customization: collapsible.
@@ -126,7 +139,9 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
    rebuild. This is the #1 thing only he can unblock.
 4. **EAS dev build** — the gate for testing what Expo Go can't: real Square
    In-App Payments AND real push delivery. Needs his Expo + Apple accounts.
-   Path: `npx testflight` (build + submit in one step) once configured.
+   **Runbook is ready: `docs/EAS_AND_PAYMENTS.md`** (install the Square SDK +
+   expo-build-properties, `eas build --profile development`, test on a physical
+   iPhone). Production path: `npx testflight`.
 5. **Control panel — DONE.** Deals are now managed in-panel (the last open item):
    `DealOverride` is a full deal definition (+ `DealDiscount`), `getDeals(env)`
    reads them from the KV-backed overrides store (seeded with the two launch
