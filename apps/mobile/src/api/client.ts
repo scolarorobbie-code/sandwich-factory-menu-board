@@ -13,6 +13,7 @@ import type {
   Menu,
   Order,
   Paginated,
+  UpdateProfileRequest,
 } from "@sf/contract";
 import { API_BASE_URL } from "../config";
 
@@ -77,6 +78,8 @@ export const api = {
   refresh: (refreshToken: string) =>
     request<AuthTokens>("POST", "/auth/refresh", { body: { refreshToken } }),
   me: () => request<Customer>("GET", "/me", { auth: true }),
+  updateProfile: (body: UpdateProfileRequest) =>
+    request<Customer>("PATCH", "/me", { body, auth: true }),
 
   createOrder: (body: CreateOrderRequest) =>
     request<CreateOrderResponse>("POST", "/orders", { body, auth: true, idempotencyKey: uuid() }),

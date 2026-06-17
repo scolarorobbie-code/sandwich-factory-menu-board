@@ -6,6 +6,7 @@ import type {
   LoginRequest,
   RefreshRequest,
   RegisterRequest,
+  UpdateProfileRequest,
 } from "@sf/contract";
 import type { Env } from "./env";
 import { error, json } from "./responses";
@@ -215,6 +216,37 @@ export async function refresh(req: Request, env: Env): Promise<Response> {
 export async function me(req: Request, env: Env): Promise<Response> {
   const user = await requireAuth(req, env);
   if (!user) return error("UNAUTHENTICATED", "Sign in required", 401);
+  return json(user.customer);
+}
+
+/**
+ * PATCH /me — update the signed-in customer's editable profile (name / phone).
+ * Additive partial update; only the provided fields change. Phone is the key one:
+ * Apple Sign-In users have none, which blocks Square Loyalty (mapped by phone),
+ * so this lets them add it. Email/identity are intentionally not editable here.
+ * Production: also push the change to the linked Square customer record.
+ */
+export async function updateProfile(req: Request, _env: Env, user: StoredUser): Promise<Response> {
+  const body = (await req.json()) as UpdateProfileRequest;
+
+  if (body.firstName !== undefined) {
+    const trimmed = body.firstName.trim();
+    if (!trimmed) return error("VALIDATION_FAILED", "First name can't be empty", 422);
+    user.customer.firstName = trimmed;
+  }
+  if (body.lastName !== undefined) {
+    const trimmed = body.lastName.trim();
+    user.customer.lastName = trimmed || undefined;
+  }
+  if (body.phone !== undefined) {
+    const trimmed = body.phone.trim();
+    if (trimmed && !/^\+?[0-9 ()\-.]{7,20}$/.test(trimmed)) {
+      return error("VALIDATION_FAILED", "Enter a valid phone number", 422);
+    }
+    user.customer.phone = trimmed || undefined;
+  }
+
+  store.putUser(user);
   return json(user.customer);
 }
 
