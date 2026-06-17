@@ -19,6 +19,9 @@
     },
     "extra": {
       "comment": "EXPO_PUBLIC_API_BASE_URL is read from the environment at build/start time. See src/config.ts.",
+      "squareApplicationId": "sandbox-sq0idb-TDtiLZtopTCh-jcki61aMA",
+      "squareEnvironment": "sandbox",
+      "squarePaymentsNote": "squareApplicationId is the PUBLIC Square sandbox APPLICATION ID — it is NOT a secret and is safe to ship in the app bundle (it only identifies the merchant app to Square's In-App Payments SDK so cards tokenize on-device). The privileged SQUARE_ACCESS_TOKEN stays backend-only (hard rule #1). When going live, swap this to the production application id (sq0idp-...) and set squareEnvironment to 'production'. Read by src/payments/squarePayments.ts; full runbook: docs/EAS_AND_PAYMENTS.md.",
       "brandingTODO": {
         "note": "NO logo/icon assets exist yet, so this config intentionally relies on Expo's BUILT-IN DEFAULT icon + splash. We deliberately do NOT set 'icon', 'splash.image', or 'android.adaptiveIcon' because pointing them at files that don't exist breaks EAS builds. When the owner sends the real logo, add the asset files under apps/mobile/assets/ then add the keys below. Full checklist: docs/BRANDING.md.",
         "icon": "Add top-level expo.icon = './assets/icon.png' — 1024x1024 PNG, opaque (no transparency), square, no pre-rounded corners (Apple/Google mask it).",
