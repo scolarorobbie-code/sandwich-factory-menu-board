@@ -88,6 +88,23 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   tests (71 total, all green). Square stays the price source of truth — deals are
   an app promo layer. See `docs/CONTROL_PANEL.md`.
 
+## Landed in the THIRD pass (2026-06-17, all merged, green, pushed)
+- **Combo rules are DATA now, not a regex guess** — `ModifierGroup.conditional`
+  is a contract field set from the control panel; the app prefers it and the old
+  `/drink/`+`/combo/` regex is only a fallback for unconfigured items. The combo
+  saga is properly closed.
+- **Branding scaffold** — ALL colors + the logo live in one file
+  (`apps/mobile/src/brand.ts`); `theme.ts` derives from it (app looks identical
+  today). `Brandmark` header component auto-swaps text→logo image when assets
+  arrive. `docs/BRANDING.md` is the owner's drop-in checklist. So branding is now
+  a quick swap once he sends assets — not a rebuild.
+- **Backend tests expanded to 108** (was 56) — added auth (JWT/PBKDF2/validation),
+  payments (charge/decline/status/ownership), and account/favorites/history.
+- **Mobile UX polish** — **menu search** (filters 129 items live), pull-to-refresh,
+  **order ETA** ("Ready in ~N min", from `pickup.readyEta`) + upgraded status
+  timeline, unified friendly empty/error states, and an **accessibility pass**
+  (labels/roles/hints, ≥44pt targets) for App-Store quality.
+
 ## Decisions (owner-confirmed)
 - Photos: real Square + AI fallback. Brand: **match website** (awaiting his logo +
   colors — site is bot-blocked, he must send the image). Customization: collapsible.
@@ -103,9 +120,10 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
    ⌘R, and confirm a combo → "Choose Your Drink" appears.
 2. **Run a real end-to-end test order** — the full flow is built and ready.
    See the test protocol below.
-3. **Branding** — STILL BLOCKED on the owner: need his logo (PNG/vector) + brand
-   colors + storefront/food photos. Then: extract colors, apply theme, logo in
-   header + splash. This is the #1 thing only he can unblock.
+3. **Branding** — scaffold is READY (one file: `apps/mobile/src/brand.ts` +
+   `docs/BRANDING.md`). Still need the OWNER to send: logo (PNG/vector) + brand
+   hex colors + storefront/food photos. Once he does it's a quick drop-in, not a
+   rebuild. This is the #1 thing only he can unblock.
 4. **EAS dev build** — the gate for testing what Expo Go can't: real Square
    In-App Payments AND real push delivery. Needs his Expo + Apple accounts.
    Path: `npx testflight` (build + submit in one step) once configured.
