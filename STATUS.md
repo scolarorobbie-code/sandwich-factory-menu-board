@@ -54,6 +54,26 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   he leaves Orda; the app becomes the ordering path).
 - **Control panel design + remaining work:** `docs/CONTROL_PANEL.md`.
 
+## Landed in the SECOND parallel-agent pass (2026-06-17, all merged, green, pushed)
+- **Test suite + CI** — Vitest, **56 passing backend tests** (`npm test` / `cd
+  services/backend && npm run test`) covering webhook HMAC verify + event dedupe,
+  order pricing + tax + Stars redemption math, loyalty tier selection, overrides
+  apply, and Square modifier-group mapping. **GitHub Actions CI** (`.github/
+  workflows/ci.yml`) typechecks backend + mobile and runs tests on every push/PR.
+- **Control panel now PERSISTS** — overrides moved to Cloudflare KV (`OVERRIDES`
+  binding) with in-memory fallback for local dev/tests. No more reset-on-restart.
+  Owner creates the namespace before deploy: `cd services/backend && npx wrangler
+  kv namespace create OVERRIDES` (also documented for `IDEMPOTENCY`).
+- **Prep time → Square `pickup_at`** — orders now carry a scheduled pickup time =
+  now + max(prep minutes across items, floor 10), instead of always ASAP.
+- **Push notifications wired end-to-end** — mobile registers an Expo push token on
+  sign-in (crash-proof, no-ops in Expo Go/sim); backend sends real Expo pushes from
+  the VERIFIED webhook path: `order.created` → staff tablet, `order.updated`/
+  `order.fulfillment.updated` → customer "ready for pickup". Staff tablet set via
+  long-press Account greeting OR `STAFF_PUSH_TOKEN` env; `NTFY_TOPIC` backup channel.
+  ⚠️ Owner must `npm install` (new `expo-notifications` dep). ⚠️ REAL push delivery
+  needs an EAS dev build on a PHYSICAL device — cannot be verified in Expo Go/sim.
+
 ## Decisions (owner-confirmed)
 - Photos: real Square + AI fallback. Brand: **match website** (awaiting his logo +
   colors — site is bot-blocked, he must send the image). Customization: collapsible.
@@ -64,20 +84,23 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   modifiers, hide items, prep time, deals). Tracked in CLAUDE.md.
 
 ## Next steps (in priority order)
-1. **Verify combos in the sim** — after pulling latest: `npm run add-drink-set`,
-   restart backend, ⌘R. Pick a combo → "Choose Your Drink" should appear.
-2. **`npm install`** on his Mac — needed for the new `expo-haptics` dependency.
-3. **Run a real end-to-end test order** — the full flow is built and ready.
+1. **`npm install` on his Mac** — REQUIRED now (new deps: `expo-haptics`,
+   `expo-notifications`, `vitest`). Then `npm run add-drink-set`, restart backend,
+   ⌘R, and confirm a combo → "Choose Your Drink" appears.
+2. **Run a real end-to-end test order** — the full flow is built and ready.
    See the test protocol below.
-4. **Branding** — STILL BLOCKED: need his logo (PNG/vector) + brand colors +
-   storefront/food photos. Then: extract colors, apply theme, logo in header + splash.
-5. **Control panel — finish:** KV/D1 persistence (overrides reset on restart today),
-   mobile reading `__conditional` overrides to retire the regex heuristic, prep
-   time → Square `pickup_at` in order creation. See `docs/CONTROL_PANEL.md`.
+3. **Branding** — STILL BLOCKED on the owner: need his logo (PNG/vector) + brand
+   colors + storefront/food photos. Then: extract colors, apply theme, logo in
+   header + splash. This is the #1 thing only he can unblock.
+4. **EAS dev build** — the gate for testing what Expo Go can't: real Square
+   In-App Payments AND real push delivery. Needs his Expo + Apple accounts.
+   Path: `npx testflight` (build + submit in one step) once configured.
+5. **Control panel — remaining:** mobile reading `__conditional` overrides to
+   retire the regex heuristic; move deals behind the overrides store. (KV
+   persistence + prep-time→pickup_at are DONE.) See `docs/CONTROL_PANEL.md`.
 6. **Loyalty — to actually test Stars:** sandbox needs an ACTIVE loyalty program
    configured; loyalty maps by phone (now captured at sign-up).
-7. **Work the competitive punch-list** in `docs/COMPETITIVE_ANALYSIS.md` (push
-   notifications wiring is the next big one — backend already supports it).
+7. **Work the competitive punch-list** in `docs/COMPETITIVE_ANALYSIS.md`.
 
 ## Test order protocol (Phase 1 verification)
 Do this to prove the real square loop works:
