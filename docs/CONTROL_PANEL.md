@@ -48,10 +48,12 @@ conditional overrides so the regex heuristic can be retired.
 - **Schema** (`contract/types.ts`): `MenuOverrides`, `ItemOverride`,
   `GroupOverride`, `ConditionalRule`, `DealOverride` (+ `PutOverridesRequest`),
   and matching OpenAPI schemas in `contract/openapi.yaml`.
-- **Store** (`services/backend/src/overrides.ts`): `overridesStore` — an
-  in-memory document with `get()` / `put()` / `reset()`, following the same
-  dev-only pattern as `store.ts`. Swappable for Workers KV / D1 by changing only
-  those functions.
+- **Store** (`services/backend/src/overrides.ts`): `overridesStore` —
+  `async get(env)` / `async put(env, req)` / `reset()`. **Persists in Workers KV
+  when the `OVERRIDES` binding is present, else an in-memory document** (same
+  convention as the `IDEMPOTENCY` KV in `webhook.ts`: prefer the binding, fall
+  back to memory so local dev + tests need zero config). One JSON blob under the
+  KV key `menu:overrides`. See "KV persistence (done)" below.
 - **Apply step** (`services/backend/src/overrides.ts`): `applyOverrides(menu,
   overrides)` — pure, non-mutating; runs in `menu.ts getMenu()` AFTER
   `fetchLiveMenu`. So overrides never become a competing source of items/prices.
@@ -87,6 +89,36 @@ conditional overrides so the regex heuristic can be retired.
   (typed by `src/html.d.ts`). Works in `wrangler dev` and `wrangler deploy` with
   no extra toolchain.
 
+### KV persistence (done)
+
+Overrides now survive Worker restarts/redeploys. `overridesStore.get(env)` /
+`put(env, req)` read/write **Workers KV when the `OVERRIDES` binding is present**,
+and fall back to the in-memory document when it is not — the exact convention the
+`IDEMPOTENCY` KV uses in `webhook.ts`. The whole document is stored as one JSON
+blob under the KV key `menu:overrides`.
+
+- **Local dev/tests:** with no binding, the store stays in memory (zero config).
+  Under `wrangler dev` the binding (once added) resolves to a **simulated KV**, so
+  saved overrides persist locally too (in `.wrangler/`).
+- **Production:** create the namespace once, then uncomment the `[[kv_namespaces]]`
+  block for `OVERRIDES` in `wrangler.toml` with the returned id:
+  ```sh
+  cd services/backend && npx wrangler kv namespace create OVERRIDES
+  ```
+  `env.ts` already declares the optional `OVERRIDES?: KVNamespace` binding;
+  `applyOverrides` is storage-agnostic, so nothing else changed.
+
+### Prep time → `pickup_at` (done)
+
+The per-item `prepTimeMinutes` override now drives the Square PICKUP fulfillment's
+ready time. At order-create (`orders.ts`, LIVE mode only): `pickup_at = now +
+max(DEFAULT_PREP_MINUTES, max prepTimeMinutes across the ordered items)`, where
+`DEFAULT_PREP_MINUTES = 10`. `overrides.ts` exposes the pure helper
+`maxPrepTimeMinutes(overrides, itemIds)`. `square.ts createSquareOrder` takes an
+optional `pickupAt?` ISO string: when present it sends `pickup_details.pickup_at`
+(a SCHEDULED pickup); when absent it keeps `schedule_type: "ASAP"` (Square forbids
+sending both). Mock mode is unaffected (it never calls Square).
+
 ### What each field does
 
 Per ITEM (keyed by Square ITEM id):
@@ -95,7 +127,7 @@ Per ITEM (keyed by Square ITEM id):
 |---|---|
 | `hidden` | Item dropped from the menu entirely. |
 | `soldOut` | `available` forced false (we only ever take availability away; Square Inventory still wins when it already marked sold out). |
-| `prepTimeMinutes` | NOT applied to the menu. Reserved to feed Square order `pickup_at` at order-create time (TODO in `orders.ts`). |
+| `prepTimeMinutes` | NOT applied to the menu. Feeds the Square order `pickup_at` at order-create time (wired — see "Prep time → `pickup_at` (done)"). |
 | `groups[]` | Per modifier-group overrides (below). |
 
 Per modifier GROUP (keyed by Square MODIFIER_LIST id):
@@ -131,13 +163,10 @@ ignores the field. The migration is deliberate and reviewed:
 
 ## What remains to build
 
-1. **KV / D1 persistence (next priority)** — the overrides document still lives
-   in `overridesStore`'s in-memory variable, so it resets on every Worker
-   restart/redeploy. Replace `get()` / `put()` with Workers KV (single JSON blob
-   keyed e.g. `menu:overrides`) or D1. `applyOverrides` is already
-   storage-agnostic, so nothing else changes; add the binding to `env.ts` +
-   `wrangler.toml`. **Until this lands, treat saved overrides as ephemeral.**
-2. **Mobile reads the conditional overrides (retire the regex)** — the app
+~~KV / D1 persistence~~ and ~~Prep time → `pickup_at`~~ are now **done** — see
+"KV persistence (done)" and "Prep time → `pickup_at` (done)" above. Still open:
+
+1. **Mobile reads the conditional overrides (retire the regex)** — the app
    already gets overridden min/max/hidden/sold-out transparently through
    `GET /menu` (applied server-side). The remaining work is consuming the
    `__conditional` metadata to replace the `/drink/` + `/combo/` regex in
@@ -145,11 +174,7 @@ ignores the field. The migration is deliberate and reviewed:
    promote `__conditional` onto the contract `ModifierGroup`, make
    `ItemDetailScreen` read it (falling back to the regex when absent), then
    delete the regex (see bridge above).
-3. **Prep time → `pickup_at`** — read `prepTimeMinutes` in `orders.ts` /
-   `square.ts createSquareOrder` and set the Square fulfillment `pickup_at`.
-   (Tracks the existing TODO in `docs/SQUARE_INTEGRATION.md`.) The panel already
-   captures the value; it just isn't wired into order creation yet.
-4. **Deals into the panel** — `DealOverride` is a stub. Move the hard-coded deals
+2. **Deals into the panel** — `DealOverride` is a stub. Move the hard-coded deals
    in `menu.ts getDeals()` behind the overrides store so the owner edits them.
    (The panel currently edits items/groups only.)
 

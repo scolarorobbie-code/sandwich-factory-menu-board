@@ -6,6 +6,7 @@ import type {
   MenuOverrides,
   PutOverridesRequest,
 } from "@sf/contract";
+import type { Env } from "./env";
 
 /**
  * Merchant control-panel "menu overrides" store + apply step.
@@ -14,48 +15,77 @@ import type {
  * photos. This module stores OUR layer on top — the rules Square's API can't
  * express per modifier group (required/min/max, conditional reveal) plus
  * operational toggles (hide / sold-out / prep time). The control panel
- * (web UI, later) reads/writes this; the backend applies it to the live menu
- * AFTER fetchLiveMenu.
+ * (web UI) reads/writes this; the backend applies it to the live menu AFTER
+ * fetchLiveMenu.
  *
- * DEV-ONLY backing: an in-memory document, exactly like store.ts. Production
- * swaps this for Workers KV / D1 by changing only the read/write functions —
- * everything else (applyOverrides) is pure and storage-agnostic.
+ * BACKING STORE: durable in Workers KV when the `OVERRIDES` binding is present,
+ * else an in-memory document. This follows the same convention as the
+ * `IDEMPOTENCY` KV in webhook.ts — prefer the binding, fall back to an in-process
+ * value when it is absent so local dev and tests work with zero config. (Local
+ * `wrangler dev` supplies a simulated KV automatically, so persistence is
+ * automatic there too.) `applyOverrides` stays pure + storage-agnostic.
  */
 
 // ---------------------------------------------------------------------------
-// Backing store (in-memory; swap for KV/D1 later — see store.ts conventions)
+// Backing store — Workers KV when bound (env.OVERRIDES), else in-memory.
+// Mirrors the IDEMPOTENCY pattern in webhook.ts.
 // ---------------------------------------------------------------------------
+
+/** Single KV key holding the whole overrides document as one JSON blob. */
+const KV_KEY = "menu:overrides";
 
 function emptyOverrides(): MenuOverrides {
   return { items: {}, deals: {}, updatedAt: new Date(0).toISOString() };
 }
 
+/** In-memory fallback document (used only when no KV binding is present). */
 let current: MenuOverrides = emptyOverrides();
 
+/** Normalize a PUT request into a stored doc (keys match `ItemOverride.itemId`). */
+function normalize(req: PutOverridesRequest): MenuOverrides {
+  const items: Record<string, ItemOverride> = {};
+  for (const [key, ov] of Object.entries(req.items ?? {})) {
+    items[key] = { ...ov, itemId: ov.itemId || key };
+  }
+  return {
+    items,
+    deals: req.deals ?? {},
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export const overridesStore = {
-  /** Read the full overrides document. Always returns a value (empty if unset). */
-  get(): MenuOverrides {
-    return current;
+  /**
+   * Read the full overrides document. Always returns a value (empty if unset).
+   * Reads from KV when `env.OVERRIDES` is bound, else the in-memory fallback.
+   */
+  async get(env: Env): Promise<MenuOverrides> {
+    if (!env.OVERRIDES) return current; // dev/test fallback
+    const raw = await env.OVERRIDES.get(KV_KEY);
+    if (!raw) return emptyOverrides();
+    try {
+      return JSON.parse(raw) as MenuOverrides;
+    } catch {
+      return emptyOverrides(); // corrupt blob: behave as if unset rather than throw
+    }
   },
 
   /**
    * Replace the stored overrides with the given request. Returns the saved doc.
-   * Keys are normalized so an `ItemOverride.itemId` always matches its map key.
+   * Persists to KV when bound (a single JSON blob), else updates memory. Keys are
+   * normalized so an `ItemOverride.itemId` always matches its map key.
    */
-  put(req: PutOverridesRequest): MenuOverrides {
-    const items: Record<string, ItemOverride> = {};
-    for (const [key, ov] of Object.entries(req.items ?? {})) {
-      items[key] = { ...ov, itemId: ov.itemId || key };
+  async put(env: Env, req: PutOverridesRequest): Promise<MenuOverrides> {
+    const doc = normalize(req);
+    if (env.OVERRIDES) {
+      await env.OVERRIDES.put(KV_KEY, JSON.stringify(doc));
+    } else {
+      current = doc;
     }
-    current = {
-      items,
-      deals: req.deals ?? {},
-      updatedAt: new Date().toISOString(),
-    };
-    return current;
+    return doc;
   },
 
-  /** Test/dev reset. */
+  /** Test/dev reset of the in-memory fallback. (No-op against KV.) */
   reset(): void {
     current = emptyOverrides();
   },
@@ -79,8 +109,8 @@ export const overridesStore = {
  *   app reads this opt-in field when it's ready, ignores it until then.)
  *
  * `prepTimeMinutes` is NOT applied here — it feeds Square order `pickup_at` at
- * order-create time, not the menu. It is read from the override doc in orders.ts
- * (TODO) when that wiring lands.
+ * order-create time, not the menu. orders.ts reads it from the override doc via
+ * `maxPrepTimeMinutes()` (below) to compute the PICKUP fulfillment's `pickup_at`.
  */
 export function applyOverrides(menu: Menu, overrides: MenuOverrides): Menu {
   const itemOverrides = overrides.items;
@@ -132,3 +162,22 @@ export function applyOverrides(menu: Menu, overrides: MenuOverrides): Menu {
 type ModifierGroupWithMeta = Menu["categories"][number]["items"][number]["modifierGroups"][number] & {
   __conditional?: ConditionalRule;
 };
+
+// ---------------------------------------------------------------------------
+// Prep time → Square order `pickup_at`
+// ---------------------------------------------------------------------------
+
+/**
+ * Largest `prepTimeMinutes` override across the given Square ITEM ids, or 0 when
+ * none of them carry a prep-time override. orders.ts uses this to set the PICKUP
+ * fulfillment's `pickup_at = now + max(prep, default)`. Pure: takes the already-
+ * loaded overrides doc (caller fetches it once via `overridesStore.get(env)`).
+ */
+export function maxPrepTimeMinutes(overrides: MenuOverrides, itemIds: Iterable<string>): number {
+  let max = 0;
+  for (const id of itemIds) {
+    const minutes = overrides.items[id]?.prepTimeMinutes;
+    if (typeof minutes === "number" && minutes > max) max = minutes;
+  }
+  return max;
+}

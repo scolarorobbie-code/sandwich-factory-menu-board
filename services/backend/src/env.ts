@@ -19,6 +19,13 @@ export interface Env {
 
   // KV namespace for idempotency keys + webhook event de-dupe (optional in dev)
   IDEMPOTENCY?: KVNamespace;
+
+  // KV namespace for merchant control-panel menu overrides (optional in dev).
+  // When bound, overrides persist across Worker restarts/redeploys; when absent
+  // (zero-config local/test), overrides.ts falls back to an in-memory document.
+  // Same convention as IDEMPOTENCY above. `wrangler dev` supplies a simulated KV
+  // automatically, so local edits also persist without any setup.
+  OVERRIDES?: KVNamespace;
 }
 
 /** True when real Square credentials are present; otherwise we serve mock data. */

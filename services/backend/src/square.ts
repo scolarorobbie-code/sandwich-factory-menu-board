@@ -243,6 +243,11 @@ export interface SquareOrderResult {
  * Create an order in Square via the Orders API. Square computes tax/pricing
  * authoritatively from the catalog + location settings. The order is created
  * as PICKUP so it appears correctly in the existing Square POS.
+ *
+ * `pickupAt` (ISO 8601, RFC 3339) feeds the control-panel prep-time → ready-time
+ * estimate: when present we send a SCHEDULED pickup with `pickup_at = now + prep`
+ * (Square requires `pickup_at` and forbids `schedule_type: ASAP` together). When
+ * absent we fall back to ASAP.
  */
 export async function createSquareOrder(
   env: Env,
@@ -250,7 +255,13 @@ export async function createSquareOrder(
   idempotencyKey: string,
   customerName: string,
   pickupNote?: string,
+  pickupAt?: string,
 ): Promise<SquareOrderResult> {
+  const pickupDetails: Record<string, unknown> = {
+    recipient: { display_name: customerName },
+    note: pickupNote,
+    ...(pickupAt ? { pickup_at: pickupAt } : { schedule_type: "ASAP" }),
+  };
   const res = await squareFetch(env, "/v2/orders", {
     method: "POST",
     body: JSON.stringify({
@@ -267,11 +278,7 @@ export async function createSquareOrder(
           {
             type: "PICKUP",
             state: "PROPOSED",
-            pickup_details: {
-              schedule_type: "ASAP",
-              recipient: { display_name: customerName },
-              note: pickupNote,
-            },
+            pickup_details: pickupDetails,
           },
         ],
       },

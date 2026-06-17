@@ -13,7 +13,7 @@ import { fetchLiveMenu } from "./square";
  */
 export async function getMenu(env: Env): Promise<Menu> {
   const base = isLive(env) ? await fetchLiveMenu(env) : MOCK_MENU;
-  return applyOverrides(base, overridesStore.get());
+  return applyOverrides(base, await overridesStore.get(env));
 }
 
 /**

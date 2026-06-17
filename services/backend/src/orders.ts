@@ -17,6 +17,7 @@ import {
   redeemReward,
 } from "./loyalty";
 import { getDeals, getMenu } from "./menu";
+import { maxPrepTimeMinutes, overridesStore } from "./overrides";
 import { error, json } from "./responses";
 import { createSquareOrder, retrieveSquareOrder, type SquareLineItem } from "./square";
 import { nextDisplayNumber, store, type StoredUser } from "./store";
@@ -25,6 +26,11 @@ import { nextDisplayNumber, store, type StoredUser } from "./store";
 // Orders API calculates tax/discounts authoritatively from the catalog + location.
 const TAX_RATE = 0.0975;
 const STARS_PER_DOLLAR = 1;
+
+// Floor prep time when no per-item override is set, so `pickup_at` is always a
+// realistic few minutes out rather than "now". The control panel can raise this
+// per item via `prepTimeMinutes`.
+const DEFAULT_PREP_MINUTES = 10;
 
 const usd = (amount: number): Money => ({ amount: Math.round(amount), currency: "USD" });
 
@@ -119,9 +125,16 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
       }));
       const idempotencyKey = req.headers.get("Idempotency-Key") ?? crypto.randomUUID();
       const name = [user.customer.firstName, user.customer.lastName].filter(Boolean).join(" ");
+      // Prep time → Square `pickup_at`: now + the largest control-panel
+      // prepTimeMinutes across the ordered items (floored at DEFAULT_PREP_MINUTES).
+      const prepMinutes = Math.max(
+        DEFAULT_PREP_MINUTES,
+        maxPrepTimeMinutes(await overridesStore.get(env), body.lineItems.map((l) => l.itemId)),
+      );
+      const pickupAt = new Date(Date.now() + prepMinutes * 60_000).toISOString();
       // NOTE: app-level deal discounts are applied as ad-hoc Square discounts in
       // a later pass; for now Square's catalog totals are source.
-      let sq = await createSquareOrder(env, sqLines, idempotencyKey, name, body.pickupNote);
+      let sq = await createSquareOrder(env, sqLines, idempotencyKey, name, body.pickupNote, pickupAt);
       squareOrderId = sq.squareOrderId;
 
       // Stars redemption: in LIVE mode this is a real Square Loyalty reward, so
