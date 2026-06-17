@@ -45,7 +45,7 @@ export async function handleSquareWebhook(req: Request, env: Env): Promise<Respo
   return json({ status: "accepted", type: event.type });
 }
 
-async function verifySignature(key: string, url: string, body: string, signature: string): Promise<boolean> {
+export async function verifySignature(key: string, url: string, body: string, signature: string): Promise<boolean> {
   const enc = new TextEncoder();
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
