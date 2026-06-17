@@ -88,25 +88,20 @@ This is the official Square package: **`react-native-square-in-app-payments`**.
 Our payments code already lazy-loads it by that exact name, so once it's
 installed the app uses it automatically — no code change needed.
 
-### 2b. Add the iOS deployment-target config
+### 2b. iOS deployment-target config — ALREADY DONE
 
-Square's iOS SDK requires **iOS 13.0+**. The cleanest Expo way is the
-`expo-build-properties` config plugin. Install it and add the plugin block to
-`app.json`.
-
-```bash
-npx expo install expo-build-properties
-```
-
-Then, in `apps/mobile/app.json`, add a top-level `"plugins"` array inside
-`"expo"` (next to `"name"`, `"slug"`, etc.):
+Square's iOS SDK requires iOS 13.0+, but **Expo SDK 56 itself requires iOS
+16.4+**, so the deployment target is set to `16.4`. This is already configured:
+`expo-build-properties` is installed (in `package.json`) and the plugin block is
+in `apps/mobile/app.json` — no action needed:
 
 ```jsonc
 "plugins": [
   [
     "expo-build-properties",
     {
-      "ios": { "deploymentTarget": "13.0" }
+      "ios": { "deploymentTarget": "16.4" },
+      "android": { "minSdkVersion": 24 }
     }
   ]
 ]
