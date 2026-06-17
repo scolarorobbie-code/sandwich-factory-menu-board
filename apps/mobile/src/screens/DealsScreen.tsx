@@ -26,7 +26,13 @@ export default function DealsScreen() {
         keyExtractor={(d) => d.id}
         contentContainerStyle={{ padding: 16 }}
         ListHeaderComponent={<Text style={styles.title}>App-exclusive deals 🔥</Text>}
-        ListEmptyComponent={<Text style={styles.muted}>No deals right now — check back soon!</Text>}
+        ListEmptyComponent={
+          <View style={styles.empty}>
+            <Text style={styles.emptyEmoji}>🥪</Text>
+            <Text style={styles.emptyTitle}>No deals right now</Text>
+            <Text style={styles.muted}>Check back soon — app-only offers drop here.</Text>
+          </View>
+        }
         renderItem={({ item }) => (
           <View style={styles.card}>
             {item.appExclusive ? <Text style={styles.badge}>APP ONLY</Text> : null}
@@ -44,7 +50,10 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
   title: { color: colors.text, fontSize: 24, fontWeight: "800", marginBottom: 16 },
-  muted: { color: colors.muted, fontSize: 15 },
+  muted: { color: colors.muted, fontSize: 15, textAlign: "center" },
+  empty: { alignItems: "center", paddingTop: 48, paddingHorizontal: 24, gap: 6 },
+  emptyEmoji: { fontSize: 40, marginBottom: 4 },
+  emptyTitle: { color: colors.text, fontSize: 18, fontWeight: "700" },
   card: { backgroundColor: colors.card, borderRadius: 16, padding: 18, marginBottom: 12, borderWidth: 1, borderColor: colors.line },
   badge: { color: colors.accent, fontSize: 12, fontWeight: "800", letterSpacing: 1, marginBottom: 8 },
   dealTitle: { color: colors.text, fontSize: 19, fontWeight: "800" },
