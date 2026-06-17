@@ -17,7 +17,7 @@ import {
   getLoyaltyProgram,
   redeemReward,
 } from "./loyalty";
-import { getDeals, getMenu } from "./menu";
+import { dealDiscountCents, getApplicableDealOverride, getMenu } from "./menu";
 import { maxPrepTimeMinutes, overridesStore } from "./overrides";
 import { error, json } from "./responses";
 import { createSquareOrder, retrieveSquareOrder, type SquareLineItem } from "./square";
@@ -98,8 +98,12 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
   // redeemed as a real Square Loyalty reward below (these locals are ignored).
   let discount = 0;
   if (body.dealId) {
-    const deal = getDeals().find((d) => d.id === body.dealId);
-    if (deal?.id === "deal-free-cookie" && subtotal >= 1500) discount += 249;
+    // Deal discount is driven by the override's DealDiscount spec (control-panel
+    // managed), not a hardcoded id check. doubleStars deals yield 0 here (they
+    // affect Stars accrual, not the total). Expired/disabled deals resolve to
+    // undefined and never discount.
+    const deal = await getApplicableDealOverride(env, body.dealId);
+    if (deal) discount += dealDiscountCents(deal, subtotal);
   }
   if (!isLive(env) && body.redeemStars && body.redeemStars > 0) {
     const redeemable = Math.min(body.redeemStars, user.stars);

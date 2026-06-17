@@ -16,10 +16,11 @@ brittle. The durable fix is a small data layer the owner edits from a web panel,
 which the backend applies to the live menu.
 
 **Status: the web panel + admin login are now built and working** (see below).
-Durable persistence (KV), prep-time → `pickup_at`, AND the mobile app reading
-conditional overrides are all **done**. The regex heuristic is now only a
+Durable persistence (KV), prep-time → `pickup_at`, the mobile app reading
+conditional overrides, AND **deals managed in-panel** are all **done** — every
+open control-panel item is now closed. The regex heuristic is now only a
 **fallback** — used solely when the owner has configured NO conditional rule on
-an item. What remains is moving deals behind the overrides store.
+an item.
 
 ## How the owner opens it (quick start)
 
@@ -48,8 +49,10 @@ an item. What remains is moving deals behind the overrides store.
 ### Foundation (data layer)
 
 - **Schema** (`contract/types.ts`): `MenuOverrides`, `ItemOverride`,
-  `GroupOverride`, `ConditionalRule`, `DealOverride` (+ `PutOverridesRequest`),
-  and matching OpenAPI schemas in `contract/openapi.yaml`.
+  `GroupOverride`, `ConditionalRule`, `DealOverride` + `DealDiscount`
+  (+ `PutOverridesRequest`), and matching OpenAPI schemas in
+  `contract/openapi.yaml`. `DealOverride` is now a full deal definition
+  (title/description/code/dates/enabled + a `DealDiscount` spec), not a stub.
 - **Store** (`services/backend/src/overrides.ts`): `overridesStore` —
   `async get(env)` / `async put(env, req)` / `reset()`. **Persists in Workers KV
   when the `OVERRIDES` binding is present, else an in-memory document** (same
@@ -121,6 +124,33 @@ optional `pickupAt?` ISO string: when present it sends `pickup_details.pickup_at
 (a SCHEDULED pickup); when absent it keeps `schedule_type: "ASAP"` (Square forbids
 sending both). Mock mode is unaffected (it never calls Square).
 
+### Deals managed in-panel (done)
+
+App-exclusive deals now live in the SAME overrides document the panel edits — the
+owner creates / edits / toggles / removes them from the dashboard with no code
+changes. Deals are an **app-side promotional layer** (codes + discounts), NOT a
+Square catalog concept; Square stays the price source of truth. Flow:
+
+- **Store** — deals live under `MenuOverrides.deals` (KV-backed, same blob as
+  items). A `DealOverride` is a full definition: `title`, `description`, optional
+  `code`, `enabled`, `appExclusive`, optional `startsAt`/`endsAt`, and a
+  `DealDiscount` spec (`freeItem` / `amountOff` / `doubleStars` with
+  `amountCents` + `minSubtotalCents`).
+- **Seeding** — `menu.ts defaultDealOverrides()` holds the two launch deals
+  (Double Stars, Free cookie over $15). `getDeals(env)` (now async) and the panel
+  both seed these only when the store has **no** deals, so nothing disappears for
+  an owner who hasn't opened the panel. Once any deal is saved, the store wins.
+- **App** — `GET /deals` maps enabled, in-window `DealOverride`s → the app-facing
+  `Deal` contract (unchanged). `DealsScreen` renders them as before.
+- **Checkout** — `orders.ts` applies the discount from the override's
+  `DealDiscount` spec via `dealDiscountCents()` (driven by `getApplicableDealOverride`),
+  replacing the old hardcoded `deal.id === "deal-free-cookie"` check. Behavior is
+  equivalent (free-cookie = $2.49 off over $15; double-stars = no $ off). In LIVE
+  mode Square still computes the authoritative total.
+- **Panel** — `public/admin.html` has a "Deals" section: list, add, edit, remove,
+  toggle enabled, set title/description/code/dates/discount. Saved via the same
+  `PUT /admin/overrides` (deals + items in one document).
+
 ### What each field does
 
 Per ITEM (keyed by Square ITEM id):
@@ -172,14 +202,15 @@ rule; the regex is no longer consulted for that item.
 
 ## What remains to build
 
-~~KV / D1 persistence~~, ~~Prep time → `pickup_at`~~, and ~~mobile reads
-conditional overrides / regex retired (with fallback)~~ are now **done** — see
-"KV persistence (done)", "Prep time → `pickup_at` (done)", and the bridge section
-above. Still open:
+Nothing — every planned control-panel capability is **done**: ~~KV / D1
+persistence~~, ~~Prep time → `pickup_at`~~, ~~mobile reads conditional overrides /
+regex retired (with fallback)~~, and ~~deals managed in-panel~~. See the
+respective "(done)" sections above.
 
-1. **Deals into the panel** — `DealOverride` is a stub. Move the hard-coded deals
-   in `menu.ts getDeals()` behind the overrides store so the owner edits them.
-   (The panel currently edits items/groups only.)
+Possible future polish (not blocking): richer deal types (percent-off, per-item
+targeting), and surfacing deal codes as real ad-hoc Square discounts on the LIVE
+order so the receipt itemizes them (today LIVE totals come straight from Square's
+catalog; deal discounts are reflected in mock mode and as an app promo layer).
 
 ## Endpoints
 
@@ -215,6 +246,17 @@ When `ADMIN_PASSWORD` is set, the overrides routes require the admin JWT
       ]
     },
     "ITEM_SEASONAL_WRAP": { "itemId": "ITEM_SEASONAL_WRAP", "hidden": true }
+  },
+  "deals": {
+    "deal-free-cookie": {
+      "dealId": "deal-free-cookie",
+      "title": "Free cookie over $15",
+      "description": "Spend $15 in the app and we'll add a fresh-baked cookie on us.",
+      "code": "FREECOOKIE",
+      "enabled": true,
+      "appExclusive": true,
+      "discount": { "kind": "freeItem", "amountCents": 249, "minSubtotalCents": 1500 }
+    }
   }
 }
 ```

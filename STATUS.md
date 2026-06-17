@@ -74,6 +74,20 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   ⚠️ Owner must `npm install` (new `expo-notifications` dep). ⚠️ REAL push delivery
   needs an EAS dev build on a PHYSICAL device — cannot be verified in Expo Go/sim.
 
+## Landed in the deals-in-panel pass (2026-06-17, green)
+- **App-exclusive deals now managed from the control panel** — the last open
+  control-panel item. `DealOverride` became a full, additive deal definition
+  (title/description/code/dates/enabled/appExclusive + a `DealDiscount` spec:
+  `freeItem` / `amountOff` / `doubleStars`). Deals live in the same KV-backed
+  overrides document items use; `getDeals(env)` (now async) reads + maps them to
+  the unchanged app-facing `Deal` contract, seeding the two shipped deals when the
+  store is empty so nothing disappears. Checkout (`orders.ts`) applies the discount
+  from the override spec (`dealDiscountCents`) instead of a hardcoded id check —
+  behavior equivalent; Square still computes LIVE totals. `admin.html` gained a
+  Deals section (list/add/edit/remove/toggle/dates/discount). 15 new backend
+  tests (71 total, all green). Square stays the price source of truth — deals are
+  an app promo layer. See `docs/CONTROL_PANEL.md`.
+
 ## Decisions (owner-confirmed)
 - Photos: real Square + AI fallback. Brand: **match website** (awaiting his logo +
   colors — site is bot-blocked, he must send the image). Customization: collapsible.
@@ -95,10 +109,13 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
 4. **EAS dev build** — the gate for testing what Expo Go can't: real Square
    In-App Payments AND real push delivery. Needs his Expo + Apple accounts.
    Path: `npx testflight` (build + submit in one step) once configured.
-5. **Control panel — remaining:** move deals behind the overrides store. (KV
-   persistence, prep-time→pickup_at, AND mobile reading conditional overrides —
-   `ModifierGroup.conditional` is now a contract field; the app prefers it and the
-   regex is only a fallback — are DONE.) See `docs/CONTROL_PANEL.md`.
+5. **Control panel — DONE.** Deals are now managed in-panel (the last open item):
+   `DealOverride` is a full deal definition (+ `DealDiscount`), `getDeals(env)`
+   reads them from the KV-backed overrides store (seeded with the two launch
+   deals when empty), checkout applies the discount from the override spec, and
+   `admin.html` has a Deals section (list/add/edit/remove/toggle). KV persistence,
+   prep-time→pickup_at, and mobile reading conditional overrides were already DONE.
+   See `docs/CONTROL_PANEL.md` — nothing control-panel-related remains.
 6. **Loyalty — to actually test Stars:** sandbox needs an ACTIVE loyalty program
    configured; loyalty maps by phone (now captured at sign-up).
 7. **Work the competitive punch-list** in `docs/COMPETITIVE_ANALYSIS.md`.

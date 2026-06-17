@@ -113,6 +113,34 @@
   .muted { color: var(--muted); font-size: 12px; }
   .empty-groups { color: var(--muted); font-size: 13px; padding: 8px 0; }
 
+  /* Sections + deals */
+  .section-head { display: flex; align-items: center; gap: 12px; margin-bottom: 2px; }
+  .section-title { font-size: 15px; font-weight: 650; margin: 0; }
+  .section-head .spacer { flex: 1; }
+  .section-sub { margin: 4px 0 14px; }
+  #addDealBtn { margin-left: auto; }
+
+  .deal {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); margin-bottom: 10px; padding: 14px 16px;
+  }
+  .deal.changed { border-color: var(--accent); }
+  .deal.disabled { opacity: .6; }
+  .deal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .deal-head .dtitle { font-weight: 600; flex: 1; }
+  .deal-grid { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  .deal-grid label.fld { flex: 1 1 180px; }
+  .deal-grid label.fld input[type=text], .deal-grid label.fld textarea,
+  .deal-grid label.fld select { width: 100%; }
+  .deal-grid input[type=number] { width: 110px; }
+  .deal-grid textarea { font: inherit; background: #0e1016; color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; resize: vertical; min-height: 38px; }
+  .deal .discount-fields { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+  .deal .discount-fields.hidden { display: none; }
+  button.danger { color: var(--bad); border-color: var(--line); }
+  button.danger:hover { border-color: var(--bad); }
+  .deals-empty { color: var(--muted); font-size: 13px; padding: 6px 0 12px; }
+
   /* Save bar */
   #savebar {
     position: sticky; bottom: 0; z-index: 20;
@@ -149,6 +177,20 @@
   </header>
 
   <div class="wrap">
+    <!-- ===== DEALS ===== -->
+    <section id="deals-section">
+      <div class="section-head">
+        <h2 class="section-title">App-exclusive deals</h2>
+        <button id="addDealBtn" class="ghost">+ Add deal</button>
+      </div>
+      <p class="muted section-sub">
+        Promo offers shown only in the app (codes / discounts) — your promo layer
+        on top of Square. Square still sets every price.
+      </p>
+      <div id="deals"></div>
+    </section>
+
+    <h2 class="section-title" style="margin-top:28px;">Menu items</h2>
     <div class="toolbar">
       <input id="filter" type="text" placeholder="Filter items by name…" />
       <span class="count" id="count"></span>
@@ -175,6 +217,27 @@ let menu = null;         // { categories: [...] }
 let overrides = null;    // { items: {...}, deals: {...} }
 let allGroups = [];      // [{id, name}] every modifier group, for trigger pickers
 let dirty = false;
+let dealSeq = 0;         // for unique ids on freshly-added deals
+
+// The two deals the app shipped with. Seeded into the panel when the store holds
+// none, so the owner sees + can edit the launch deals (mirrors the backend's
+// defaultDealOverrides). Once any deal is saved, the store wins.
+const DEFAULT_DEALS = {
+  "deal-double-stars": {
+    dealId: "deal-double-stars",
+    title: "Double Stars this week",
+    description: "Earn 2 Stars per $1 on every app order through Sunday.",
+    code: "DOUBLESTARS", enabled: true, appExclusive: true,
+    discount: { kind: "doubleStars" },
+  },
+  "deal-free-cookie": {
+    dealId: "deal-free-cookie",
+    title: "Free cookie over $15",
+    description: "Spend $15 in the app and we'll add a fresh-baked cookie on us.",
+    code: "FREECOOKIE", enabled: true, appExclusive: true,
+    discount: { kind: "freeItem", amountCents: 249, minSubtotalCents: 1500 },
+  },
+};
 
 // ---------- helpers ----------
 function token() { return localStorage.getItem(TOKEN_KEY); }
@@ -237,6 +300,11 @@ async function loadAll() {
   overrides = await oRes.json();
   if (!overrides.items) overrides.items = {};
   if (!overrides.deals) overrides.deals = {};
+  // Seed the shipped launch deals when the store has none, so the panel shows
+  // them for editing (matches the backend's getDeals default-seeding).
+  if (Object.keys(overrides.deals).length === 0) {
+    overrides.deals = JSON.parse(JSON.stringify(DEFAULT_DEALS));
+  }
 
   // Collect every modifier group across the menu for the trigger pickers.
   const seen = new Map();
@@ -266,6 +334,159 @@ function existingItemOv(itemId) { return overrides.items[itemId]; }
 function existingGroupOv(itemId, groupId) {
   const iv = overrides.items[itemId];
   return iv && iv.groups ? iv.groups.find(x => x.groupId === groupId) : undefined;
+}
+
+// ---------- deals ----------
+function renderDeals() {
+  const host = el("deals");
+  host.innerHTML = "";
+  const entries = Object.entries(overrides.deals || {});
+  if (!entries.length) {
+    const e = document.createElement("div");
+    e.className = "deals-empty";
+    e.textContent = "No deals yet. Click “Add deal” to create one.";
+    host.appendChild(e);
+    return;
+  }
+  for (const [id, deal] of entries) host.appendChild(buildDeal(id, deal));
+}
+
+function buildDeal(id, deal) {
+  const card = document.createElement("div");
+  card.className = "deal" + (deal.enabled === false ? " disabled" : "");
+
+  const kind = (deal.discount && deal.discount.kind) || "none";
+  card.innerHTML = `
+    <div class="deal-head">
+      <label class="inline"><input type="checkbox" class="dk-enabled"> Enabled</label>
+      <span class="dtitle"></span>
+      <button class="danger dk-remove">Remove</button>
+    </div>
+    <div class="deal-grid">
+      <label class="fld">Title<input type="text" class="dk-title"></label>
+      <label class="fld">Promo code (optional)<input type="text" class="dk-code" placeholder="e.g. FREECOOKIE"></label>
+    </div>
+    <div class="deal-grid" style="margin-top:12px;">
+      <label class="fld" style="flex:1 1 100%;">Description<textarea class="dk-desc"></textarea></label>
+    </div>
+    <div class="deal-grid" style="margin-top:12px;">
+      <label class="fld">Starts (optional)<input type="text" class="dk-starts" placeholder="YYYY-MM-DD or blank"></label>
+      <label class="fld">Ends (optional)<input type="text" class="dk-ends" placeholder="YYYY-MM-DD or blank"></label>
+      <label class="inline"><input type="checkbox" class="dk-appx"> App-exclusive (“APP ONLY”)</label>
+    </div>
+    <div class="deal-grid" style="margin-top:12px;">
+      <label class="fld">Discount
+        <select class="dk-kind">
+          <option value="none">None (informational)</option>
+          <option value="amountOff">Amount off</option>
+          <option value="freeItem">Free item credit (over a threshold)</option>
+          <option value="doubleStars">Double Stars (no $ off)</option>
+        </select>
+      </label>
+      <div class="discount-fields">
+        <label class="fld">Amount off ($)<input type="number" class="dk-amount" min="0" step="0.01" placeholder="0.00"></label>
+        <label class="fld">Min subtotal ($)<input type="number" class="dk-min" min="0" step="0.01" placeholder="none"></label>
+      </div>
+    </div>`;
+
+  const ckEnabled = card.querySelector(".dk-enabled");
+  const inTitle = card.querySelector(".dk-title");
+  const inCode = card.querySelector(".dk-code");
+  const inDesc = card.querySelector(".dk-desc");
+  const inStarts = card.querySelector(".dk-starts");
+  const inEnds = card.querySelector(".dk-ends");
+  const ckAppx = card.querySelector(".dk-appx");
+  const selKind = card.querySelector(".dk-kind");
+  const fields = card.querySelector(".discount-fields");
+  const inAmount = card.querySelector(".dk-amount");
+  const inMin = card.querySelector(".dk-min");
+  const titleSpan = card.querySelector(".dtitle");
+
+  // hydrate
+  ckEnabled.checked = deal.enabled !== false;
+  inTitle.value = deal.title || "";
+  inCode.value = deal.code || "";
+  inDesc.value = deal.description || "";
+  inStarts.value = deal.startsAt ? deal.startsAt.slice(0, 10) : "";
+  inEnds.value = deal.endsAt ? deal.endsAt.slice(0, 10) : "";
+  ckAppx.checked = deal.appExclusive !== false;
+  selKind.value = kind;
+  if (deal.discount && deal.discount.amountCents != null) inAmount.value = (deal.discount.amountCents / 100).toFixed(2);
+  if (deal.discount && deal.discount.minSubtotalCents != null) inMin.value = (deal.discount.minSubtotalCents / 100).toFixed(2);
+  titleSpan.textContent = deal.title || "(untitled deal)";
+
+  function syncDiscountVisibility() {
+    const k = selKind.value;
+    fields.classList.toggle("hidden", k === "none" || k === "doubleStars");
+  }
+  syncDiscountVisibility();
+
+  // ISO at start-of-day UTC; blank → undefined. End dates extend to end-of-day.
+  function toIso(v, endOfDay) {
+    v = (v || "").trim();
+    if (!v) return undefined;
+    const d = new Date(v + (endOfDay ? "T23:59:59Z" : "T00:00:00Z"));
+    return isNaN(d.getTime()) ? undefined : d.toISOString();
+  }
+  function dollarsToCents(v) {
+    v = (v || "").trim();
+    if (v === "") return undefined;
+    const n = Math.round(parseFloat(v) * 100);
+    return isNaN(n) ? undefined : Math.max(0, n);
+  }
+
+  function writeDeal() {
+    const d = overrides.deals[id];
+    if (!d) return;
+    d.enabled = ckEnabled.checked;
+    d.title = inTitle.value.trim();
+    d.code = inCode.value.trim() || undefined;
+    d.description = inDesc.value.trim();
+    d.startsAt = toIso(inStarts.value, false);
+    d.endsAt = toIso(inEnds.value, true);
+    d.appExclusive = ckAppx.checked;
+    const k = selKind.value;
+    if (k === "none") {
+      d.discount = undefined;
+    } else if (k === "doubleStars") {
+      d.discount = { kind: "doubleStars" };
+    } else {
+      d.discount = { kind: k };
+      const amt = dollarsToCents(inAmount.value);
+      if (amt != null) d.discount.amountCents = amt;
+      const min = dollarsToCents(inMin.value);
+      if (min != null) d.discount.minSubtotalCents = min;
+    }
+    titleSpan.textContent = d.title || "(untitled deal)";
+    card.classList.toggle("disabled", !ckEnabled.checked);
+    card.classList.add("changed");
+    setDirty(true);
+  }
+
+  for (const node of [inTitle, inCode, inDesc, inStarts, inEnds, inAmount, inMin]) {
+    node.addEventListener("input", writeDeal);
+  }
+  ckEnabled.addEventListener("change", writeDeal);
+  ckAppx.addEventListener("change", writeDeal);
+  selKind.addEventListener("change", () => { syncDiscountVisibility(); writeDeal(); });
+
+  card.querySelector(".dk-remove").addEventListener("click", () => {
+    if (!confirm("Remove this deal?")) return;
+    delete overrides.deals[id];
+    setDirty(true);
+    renderDeals();
+  });
+
+  return card;
+}
+
+function addDeal() {
+  const id = "deal-" + Date.now().toString(36) + "-" + (dealSeq++);
+  overrides.deals[id] = {
+    dealId: id, title: "", description: "", enabled: true, appExclusive: true,
+  };
+  setDirty(true);
+  renderDeals();
 }
 
 // ---------- render ----------
@@ -503,7 +724,28 @@ function cleanOverrides() {
     if (groups.length) out.groups = groups;
     items[id] = out;
   }
-  return { items, deals: overrides.deals || {} };
+  // Deals: normalize dealId to the map key, drop undefined fields, skip deals
+  // with no title (a blank just-added row the owner never filled in).
+  const deals = {};
+  for (const [id, dv] of Object.entries(overrides.deals || {})) {
+    const title = (dv.title || "").trim();
+    if (!title) continue;
+    const out = { dealId: id, title, description: (dv.description || "").trim() };
+    if (dv.code) out.code = dv.code;
+    if (dv.imageUrl) out.imageUrl = dv.imageUrl;
+    out.enabled = dv.enabled !== false;
+    out.appExclusive = dv.appExclusive !== false;
+    if (dv.startsAt) out.startsAt = dv.startsAt;
+    if (dv.endsAt) out.endsAt = dv.endsAt;
+    if (dv.discount && dv.discount.kind) {
+      const disc = { kind: dv.discount.kind };
+      if (dv.discount.amountCents != null) disc.amountCents = dv.discount.amountCents;
+      if (dv.discount.minSubtotalCents != null) disc.minSubtotalCents = dv.discount.minSubtotalCents;
+      out.discount = disc;
+    }
+    deals[id] = out;
+  }
+  return { items, deals };
 }
 
 async function save() {
@@ -527,8 +769,10 @@ async function save() {
     if (!overrides.deals) overrides.deals = {};
     setDirty(false);
     toast("Saved ✓", "ok");
-    // collapse + rebuild so cards reflect the cleaned, saved state
+    // collapse + rebuild so cards reflect the cleaned, saved state. (No default-
+    // deal re-seeding here: an empty deals map after save is the owner's choice.)
     document.querySelectorAll(".item").forEach(c => c.classList.remove("changed"));
+    renderDeals();
   } catch (err) {
     toast("Save error: " + err.message, "err");
     el("saveBtn").disabled = false;
@@ -542,6 +786,7 @@ async function start() {
   try {
     await loadAll();
     render();
+    renderDeals();
     setDirty(false);
   } catch (err) {
     if (err.message !== "auth") { toast("Load failed: " + err.message, "err"); }
@@ -556,6 +801,7 @@ el("reloadBtn").addEventListener("click", async () => {
   await start();
 });
 el("saveBtn").addEventListener("click", save);
+el("addDealBtn").addEventListener("click", addDeal);
 el("filter").addEventListener("input", render);
 window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 
