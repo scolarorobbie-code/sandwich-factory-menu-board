@@ -1,11 +1,17 @@
 # Branding — what we need from the owner, and exactly where it plugs in
 
-_Status: app branding is **prepped but waiting on assets**. The app currently
-ships with a premium dark placeholder palette and a text wordmark. The moment
-the owner sends a logo + colors, dropping them in is a small, well-marked edit
-in **one file** plus a couple of image files. See the web/social audit for the
-background on why we don't have these yet:
-[`docs/WEB_SOCIAL_AUDIT.md` §4](./WEB_SOCIAL_AUDIT.md)._
+_Status: **APPLIED (2026-06-17).** The owner sent the logo. The app now uses the
+real brand colors (cream `#f2e8cf` / brick-red `#c0392b` / golden bread) in
+`apps/mobile/src/brand.ts`, and a faithful in-brand **recreation** of the badge
+is wired as the app icon, splash, Android adaptive icon, and in-app header logo
+(`apps/mobile/assets/`). The colors were sampled from the logo; the badge art is
+a clean recreation (the exact PNG was sent in chat, not as a usable file)._
+
+**To use the EXACT official logo (one step):** replace the five files in
+`apps/mobile/assets/` with the owner's official exports at the same names/sizes —
+`icon.png` (1024×1024 opaque square), `splash.png` (1024×1024, logo on
+transparent), `adaptive-icon.png` (1024×1024 safe-zone, transparent),
+`logo.png` (512×512 in-app), `favicon.png` (48×48). No code change needed.
 
 ---
 

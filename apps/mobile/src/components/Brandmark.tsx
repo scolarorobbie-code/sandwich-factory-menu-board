@@ -15,17 +15,17 @@ import { colors } from "../theme";
  *
  * Used as the navigation header title (see navigation/RootNavigator.tsx).
  */
-export function Brandmark({ height = 22 }: { height?: number }) {
+export function Brandmark({ height = 30 }: { height?: number }) {
   if (logo.hasImage && logo.image != null) {
-    // Real logo path. `resizeMode="contain"` keeps the aspect ratio; width is
-    // generous and the image is contained within it. Tune once the real asset
-    // dimensions are known.
+    // Real logo. The badge is circular, so render it square; a wide wordmark
+    // logo would set `square: false` and use a generous width instead.
+    const width = logo.square ? height : height * 6;
     return (
       <Image
         source={logo.image}
         accessibilityLabel={logo.accessibilityLabel}
         resizeMode="contain"
-        style={{ height, width: height * 6 }}
+        style={{ height, width }}
       />
     );
   }

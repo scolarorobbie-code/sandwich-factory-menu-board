@@ -62,12 +62,20 @@ export const foundedYear = 2012;
  * other edits required.
  */
 export const logo = {
-  /** Set to `require("../assets/logo.png")` once the asset exists. */
-  image: null as number | null,
-  /** Flip to `true` when `image` points at a real asset. */
-  hasImage: false,
+  /**
+   * The Sandwich Factory badge. This is a faithful in-brand RECREATION generated
+   * from the owner's logo colors (cream disc, red rings, sandwich mark, wordmark,
+   * "MURFREESBORO, TN · EST. 2012"). To use the EXACT logo file, replace the PNGs
+   * in apps/mobile/assets/ (logo / icon / adaptive-icon / splash / favicon) with
+   * the owner's official exports at the same sizes — nothing else changes.
+   */
+  image: require("../assets/logo.png") as number | null,
+  /** True now that a real badge asset exists. */
+  hasImage: true,
   /** Accessible label for the logo / wordmark. */
   accessibilityLabel: `${name} logo`,
+  /** The badge is circular (square aspect) — Brandmark renders it square. */
+  square: true,
 };
 
 // ── Color palette ────────────────────────────────────────────────────────────
@@ -82,15 +90,15 @@ export const logo = {
  * keys are a contract. Do not rename them.
  */
 export const palette = {
-  bg: "#0a0a0c", // app background (near-black)
-  bg2: "#15110f", // raised surfaces: headers, tab bar, pill bar
-  card: "#1c1815", // cards / secondary buttons
-  line: "rgba(255,255,255,0.08)", // hairline borders / dividers
-  accent: "#ff5b35", // primary brand orange (CTAs, cart bar)
-  accent2: "#ffb238", // warm amber accent (prices, headings, active pills)
-  text: "#f4f1ee", // primary text on dark
-  muted: "#b8b2ac", // secondary / muted text
-  cyan: "#7fd6e0", // sparing cool accent (hints)
+  bg: "#0e0a08", // app background — warm near-black (brown/red undertone)
+  bg2: "#17100d", // raised surfaces: headers, tab bar, pill bar
+  card: "#201712", // cards / secondary buttons (warm charcoal)
+  line: "rgba(244,236,215,0.10)", // cream-tinted hairline borders / dividers
+  accent: "#c0392b", // SANDWICH FACTORY brand red (from the logo) — CTAs, cart bar
+  accent2: "#e0a33c", // warm golden (toasted-bread highlight) — prices, headings, active pills
+  text: "#f4ecd7", // warm cream (the logo cream) — primary text on dark
+  muted: "#b7a892", // warm taupe — secondary / muted text
+  cyan: "#7fc8c0", // sparing cool accent (hints), warmed to sit with the brand
 } as const;
 
 export type Palette = typeof palette;

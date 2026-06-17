@@ -7,28 +7,32 @@
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "icon": "./assets/icon.png",
     "splash": {
-      "backgroundColor": "#15110f"
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0e0a08"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.scolaroenterprises.sandwichfactory"
     },
     "android": {
-      "package": "com.scolaroenterprises.sandwichfactory"
+      "package": "com.scolaroenterprises.sandwichfactory",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#f2e8cf"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     },
     "extra": {
       "comment": "EXPO_PUBLIC_API_BASE_URL is read from the environment at build/start time. See src/config.ts.",
       "squareApplicationId": "sandbox-sq0idb-TDtiLZtopTCh-jcki61aMA",
       "squareEnvironment": "sandbox",
       "squarePaymentsNote": "squareApplicationId is the PUBLIC Square sandbox APPLICATION ID — it is NOT a secret and is safe to ship in the app bundle (it only identifies the merchant app to Square's In-App Payments SDK so cards tokenize on-device). The privileged SQUARE_ACCESS_TOKEN stays backend-only (hard rule #1). When going live, swap this to the production application id (sq0idp-...) and set squareEnvironment to 'production'. Read by src/payments/squarePayments.ts; full runbook: docs/EAS_AND_PAYMENTS.md.",
-      "brandingTODO": {
-        "note": "NO logo/icon assets exist yet, so this config intentionally relies on Expo's BUILT-IN DEFAULT icon + splash. We deliberately do NOT set 'icon', 'splash.image', or 'android.adaptiveIcon' because pointing them at files that don't exist breaks EAS builds. When the owner sends the real logo, add the asset files under apps/mobile/assets/ then add the keys below. Full checklist: docs/BRANDING.md.",
-        "icon": "Add top-level expo.icon = './assets/icon.png' — 1024x1024 PNG, opaque (no transparency), square, no pre-rounded corners (Apple/Google mask it).",
-        "splashImage": "Add 'image': './assets/splash.png' inside expo.splash — a centered ~1200x1200 logo on the #15110f background; keep resizeMode 'contain'.",
-        "androidAdaptiveIcon": "Add expo.android.adaptiveIcon = { foregroundImage: './assets/adaptive-icon.png' (1024x1024, logo centered in the safe zone, transparent bg), backgroundColor: '#15110f' }.",
-        "iosTablet": "supportsTablet is true — the icon must also read well at iPad sizes."
-      }
+      "brandingNote": "Icon/splash/adaptive-icon are now WIRED, using an in-brand RECREATION of the Sandwich Factory badge (generated from the owner's logo colors). To use the EXACT official logo, replace these files in apps/mobile/assets/ with the owner's exports at the same sizes — no config change needed: icon.png (1024x1024 opaque square), splash.png (1024x1024, badge on transparent — Expo paints the dark #0e0a08 bg), adaptive-icon.png (1024x1024 foreground, safe-zone, transparent), favicon.png (48x48). Full checklist: docs/BRANDING.md."
     }
   }
 }
