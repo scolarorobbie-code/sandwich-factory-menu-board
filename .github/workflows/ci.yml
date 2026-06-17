@@ -1,0 +1,45 @@
+name: CI
+
+# Run on every PR and on pushes to the active feature branch (and main, once
+# this lands). Keep it fast: one job, cached npm, install once for the whole
+# workspace monorepo.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - claude/new-session-u4xoyc
+
+jobs:
+  build:
+    name: typecheck + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # `npm ci` is the fast, lockfile-exact install; fall back to `npm install`
+      # if the lockfile and package.json have drifted (keeps CI from hard-failing
+      # on a benign lockfile mismatch).
+      - name: Install dependencies
+        run: npm ci || npm install
+
+      # Only the workspaces that ship a tsconfig get typechecked. The contract
+      # package is types-only (no tsconfig) and is type-validated transitively by
+      # the backend + mobile tsconfigs that include contract/types.ts.
+      - name: Typecheck backend
+        run: npx tsc --noEmit
+        working-directory: services/backend
+
+      - name: Typecheck mobile
+        run: npx tsc --noEmit
+        working-directory: apps/mobile
+
+      - name: Run tests
+        run: npm run test
