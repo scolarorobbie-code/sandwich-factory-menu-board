@@ -1,7 +1,8 @@
 import type { Deal } from "@sf/contract";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, View } from "react-native";
+import { FlatList, StyleSheet, Text, View } from "react-native";
 import { api } from "../api/client";
+import { Skeleton } from "../components/Skeleton";
 import { colors } from "../theme";
 
 export default function DealsScreen() {
@@ -13,8 +14,16 @@ export default function DealsScreen() {
 
   if (!deals) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color={colors.accent} />
+      <View style={styles.screen}>
+        <View style={{ padding: 16 }}>
+          <Text style={styles.title}>App-exclusive deals 🔥</Text>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={styles.card}>
+              <Skeleton style={{ width: "60%", height: 19, borderRadius: 6 }} />
+              <Skeleton style={{ width: "90%", height: 14, borderRadius: 6, marginTop: 10 }} />
+            </View>
+          ))}
+        </View>
       </View>
     );
   }
@@ -25,7 +34,11 @@ export default function DealsScreen() {
         data={deals}
         keyExtractor={(d) => d.id}
         contentContainerStyle={{ padding: 16 }}
-        ListHeaderComponent={<Text style={styles.title}>App-exclusive deals 🔥</Text>}
+        ListHeaderComponent={
+          <Text style={styles.title} accessibilityRole="header">
+            App-exclusive deals 🔥
+          </Text>
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyEmoji}>🥪</Text>
@@ -34,7 +47,10 @@ export default function DealsScreen() {
           </View>
         }
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <View
+            style={styles.card}
+            accessibilityLabel={`${item.appExclusive ? "App only deal. " : "Deal. "}${item.title}. ${item.description}${item.code ? `. Code ${item.code}` : ""}`}
+          >
             {item.appExclusive ? <Text style={styles.badge}>APP ONLY</Text> : null}
             <Text style={styles.dealTitle}>{item.title}</Text>
             <Text style={styles.desc}>{item.description}</Text>
@@ -48,7 +64,6 @@ export default function DealsScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
   title: { color: colors.text, fontSize: 24, fontWeight: "800", marginBottom: 16 },
   muted: { color: colors.muted, fontSize: 15, textAlign: "center" },
   empty: { alignItems: "center", paddingTop: 48, paddingHorizontal: 24, gap: 6 },

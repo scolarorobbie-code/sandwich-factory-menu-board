@@ -15,6 +15,7 @@ export default function CartScreen({ navigation }: Props) {
   if (cart.entries.length === 0) {
     return (
       <View style={styles.center}>
+        <Text style={styles.emptyEmoji}>🛒</Text>
         <Text style={styles.empty}>Your cart is empty</Text>
         <Text style={styles.muted}>Add something tasty from the menu.</Text>
       </View>
@@ -43,7 +44,12 @@ export default function CartScreen({ navigation }: Props) {
                 <Text style={styles.sub}>{item.modifiers.map((m) => m.name).join(", ")}</Text>
               )}
               {item.note ? <Text style={styles.note}>"{item.note}"</Text> : null}
-              <Pressable onPress={() => cart.remove(item.key)}>
+              <Pressable
+                onPress={() => cart.remove(item.key)}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${item.itemName} from cart`}
+              >
                 <Text style={styles.remove}>Remove</Text>
               </Pressable>
             </View>
@@ -66,9 +72,10 @@ export default function CartScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.bg, padding: 24 },
+  emptyEmoji: { fontSize: 44, marginBottom: 10 },
   empty: { color: colors.text, fontSize: 20, fontWeight: "800" },
-  muted: { color: colors.muted, fontSize: 14, marginTop: 6 },
+  muted: { color: colors.muted, fontSize: 14, marginTop: 6, textAlign: "center" },
   card: { flexDirection: "row", backgroundColor: colors.card, borderRadius: 16, padding: 16, marginBottom: 12, borderWidth: 1, borderColor: colors.line },
   name: { color: colors.text, fontSize: 17, fontWeight: "700" },
   sub: { color: colors.muted, fontSize: 14, marginTop: 2 },
