@@ -19,20 +19,45 @@
     },
     "android": {
       "package": "com.scolaroenterprises.sandwichfactory",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#f2e8cf"
-      }
+      },
+      "permissions": ["INTERNET", "POST_NOTIFICATIONS", "VIBRATE"],
+      "blockedPermissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA",
+        "RECORD_AUDIO",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "13.0"
+          },
+          "android": {
+            "minSdkVersion": 24
+          }
+        }
+      ]
+    ],
     "extra": {
       "comment": "EXPO_PUBLIC_API_BASE_URL is read from the environment at build/start time. See src/config.ts.",
       "squareApplicationId": "sandbox-sq0idb-TDtiLZtopTCh-jcki61aMA",
       "squareEnvironment": "sandbox",
       "squarePaymentsNote": "squareApplicationId is the PUBLIC Square sandbox APPLICATION ID — it is NOT a secret and is safe to ship in the app bundle (it only identifies the merchant app to Square's In-App Payments SDK so cards tokenize on-device). The privileged SQUARE_ACCESS_TOKEN stays backend-only (hard rule #1). When going live, swap this to the production application id (sq0idp-...) and set squareEnvironment to 'production'. Read by src/payments/squarePayments.ts; full runbook: docs/EAS_AND_PAYMENTS.md.",
-      "brandingNote": "Icon/splash/adaptive-icon are now WIRED, using an in-brand RECREATION of the Sandwich Factory badge (generated from the owner's logo colors). To use the EXACT official logo, replace these files in apps/mobile/assets/ with the owner's exports at the same sizes — no config change needed: icon.png (1024x1024 opaque square), splash.png (1024x1024, badge on transparent — Expo paints the dark #0e0a08 bg), adaptive-icon.png (1024x1024 foreground, safe-zone, transparent), favicon.png (48x48). Full checklist: docs/BRANDING.md."
+      "brandingNote": "Icon/splash/adaptive-icon are now WIRED, using an in-brand RECREATION of the Sandwich Factory badge (generated from the owner's logo colors). To use the EXACT official logo, replace these files in apps/mobile/assets/ with the owner's exports at the same sizes — no config change needed: icon.png (1024x1024 opaque square), splash.png (1024x1024, badge on transparent — Expo paints the dark #0e0a08 bg), adaptive-icon.png (1024x1024 foreground, safe-zone, transparent), favicon.png (48x48). Full checklist: docs/BRANDING.md.",
+      "androidNote": "Android ships from this SAME config (CLAUDE.md hard rule #5 — no separate Android project). android.permissions is intentionally minimal (INTERNET for the backend, POST_NOTIFICATIONS for order pushes on Android 13+, VIBRATE for the notification channel); everything else is in blockedPermissions so EAS won't auto-add unused permissions from native deps. REAL Android push DELIVERY needs FCM: the owner creates a Firebase project, downloads google-services.json, and wires it via expo.android.googleServicesFile + EAS credentials — see docs/EAS_AND_PAYMENTS.md (Android section). Square In-App Payments on Android needs minSdkVersion 24, set in the expo-build-properties plugin above."
     }
   }
 }

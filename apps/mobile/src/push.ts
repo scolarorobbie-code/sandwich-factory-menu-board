@@ -33,15 +33,64 @@ function notifications(): Notifications | null {
 // Push only exists on real mobile devices; skip on web entirely.
 const supported = Platform.OS === "ios" || Platform.OS === "android";
 
+/**
+ * Android channel id used for ALL order-related pushes. Android REQUIRES a
+ * channel for heads-up display + sound; without one, notifications arrive
+ * silently (or are dropped on Android 8+). iOS ignores channels entirely.
+ */
+export const ANDROID_DEFAULT_CHANNEL = "default";
+
 let handlerInstalled = false;
+let androidChannelReady = false;
 
 /**
- * Install the foreground notification handler ONCE (idempotent). Without this,
- * notifications received while the app is open are silently dropped on iOS.
- * Safe to call at app start regardless of permission/sign-in state.
+ * Create the default Android notification channel ONCE (idempotent, best-effort).
+ *
+ * Android (8.0+) drops any notification not bound to a channel, and the
+ * channel — not the message — owns importance, sound and vibration. We use HIGH
+ * importance so order updates pop as a heads-up banner with sound + vibration.
+ * No-op on iOS/web (channels don't exist there) and crash-proof.
+ *
+ * NOTE: creating the channel is all the APP can do. ACTUAL push DELIVERY on
+ * Android additionally requires FCM credentials (a Firebase project +
+ * google-services.json uploaded to EAS) — see docs/EAS_AND_PAYMENTS.md. Without
+ * FCM the channel still governs how locally-presented notifications look.
+ */
+async function ensureAndroidChannel(): Promise<void> {
+  if (Platform.OS !== "android" || androidChannelReady) return;
+  try {
+    const N = notifications();
+    if (!N) return;
+    await N.setNotificationChannelAsync(ANDROID_DEFAULT_CHANNEL, {
+      name: "Order updates",
+      description: "New-order alerts and pickup status for your Sandwich Factory orders.",
+      importance: N.AndroidImportance.HIGH,
+      sound: "default",
+      enableVibrate: true,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: "#E4572E",
+      lockscreenVisibility: N.AndroidNotificationVisibility.PUBLIC,
+    });
+    androidChannelReady = true;
+  } catch (err) {
+    // Channel is best-effort; a failure must never block startup or pushes.
+    console.log("[push] android channel setup skipped:", errMessage(err));
+  }
+}
+
+/**
+ * Install the foreground notification handler + (on Android) the notification
+ * channel ONCE (idempotent). Without the handler, notifications received while
+ * the app is open are silently dropped on iOS; without the channel, Android
+ * suppresses heads-up display + sound. Safe to call at app start regardless of
+ * permission/sign-in state. Crash-proof / no-op on web + Expo Go.
  */
 export function setupNotifications(): void {
-  if (!supported || handlerInstalled) return;
+  if (!supported) return;
+  // The Android channel is independent of the foreground handler — ensure it
+  // even when the handler is already installed (e.g. a later re-entry).
+  void ensureAndroidChannel();
+  if (handlerInstalled) return;
   try {
     const N = notifications();
     if (!N) return;
@@ -92,17 +141,8 @@ export async function getExpoPushToken(): Promise<string | null> {
       return null;
     }
 
-    // Android needs a notification channel for heads-up display.
-    if (Platform.OS === "android") {
-      try {
-        await N.setNotificationChannelAsync("default", {
-          name: "Order updates",
-          importance: N.AndroidImportance.HIGH,
-        });
-      } catch {
-        /* channel is best-effort */
-      }
-    }
+    // Android needs a notification channel for heads-up display + sound.
+    await ensureAndroidChannel();
 
     const settings = await N.getPermissionsAsync();
     let granted = settings.granted || settings.ios?.status === N.IosAuthorizationStatus.PROVISIONAL;
