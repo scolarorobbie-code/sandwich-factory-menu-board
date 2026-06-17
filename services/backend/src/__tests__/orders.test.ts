@@ -151,6 +151,49 @@ describe("createOrder (mock-mode tax / discount / Stars math)", () => {
     expect(order.discount.amount).toBe(0);
   });
 
+  it("does NOT discount when the deal has been disabled in the control panel", async () => {
+    // Owner toggled the free-cookie deal off — the override path must respect it.
+    await overridesStore.put(mockEnv(), {
+      items: {},
+      deals: {
+        "deal-free-cookie": {
+          dealId: "deal-free-cookie",
+          title: "Free cookie over $15",
+          description: "x",
+          enabled: false,
+          discount: { kind: "freeItem", amountCents: 249, minSubtotalCents: 1500 },
+        },
+      },
+    });
+    const { order } = await place({
+      lineItems: [
+        { itemId: ITALIAN, variationId: ITALIAN_12, quantity: 1, modifierIds: [] }, // 1199
+        { itemId: TURKEY, variationId: TURKEY_12, quantity: 1, modifierIds: [] }, // 1249
+      ],
+      dealId: "deal-free-cookie",
+    });
+    expect(order.discount.amount).toBe(0);
+  });
+
+  it("applies a panel-defined amountOff deal at checkout", async () => {
+    await overridesStore.put(mockEnv(), {
+      items: {},
+      deals: {
+        "deal-5off": {
+          dealId: "deal-5off",
+          title: "$5 off",
+          description: "x",
+          discount: { kind: "amountOff", amountCents: 500 },
+        },
+      },
+    });
+    const { order } = await place({
+      lineItems: [{ itemId: ITALIAN, variationId: ITALIAN_12, quantity: 1, modifierIds: [] }], // 1199
+      dealId: "deal-5off",
+    });
+    expect(order.discount.amount).toBe(500);
+  });
+
   it("redeems Stars in blocks of 50 = $5 (capped at user balance)", async () => {
     // 50 Stars = $5. User has 70 Stars, asks to redeem 100 -> redeemable=70 ->
     // 1 block -> $5 off.

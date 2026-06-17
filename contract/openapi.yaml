@@ -796,13 +796,40 @@ components:
           type: array
           items: { $ref: "#/components/schemas/GroupOverride" }
 
+    DealDiscount:
+      type: object
+      description: >
+        What an app-side deal does at checkout. Deals are a promo layer, NOT a
+        Square catalog concept. Square still computes authoritative totals in
+        LIVE mode; this drives the mock-mode discount + tells the app the effect.
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [freeItem, amountOff, doubleStars] }
+        amountCents:
+          type: integer
+          description: Fixed amount knocked off (cents). Required for freeItem / amountOff.
+        minSubtotalCents:
+          type: integer
+          description: Minimum cart subtotal (cents) before the discount applies.
+
     DealOverride:
       type: object
-      description: Per-deal override stub (deals move into the panel later).
-      required: [dealId]
+      description: >
+        A fully merchant-editable deal, stored in the overrides layer and mapped
+        to the app-facing Deal by the backend. The owner creates/edits/toggles
+        deals from the control panel — no code changes.
+      required: [dealId, title, description]
       properties:
         dealId: { type: string }
-        enabled: { type: boolean }
+        title: { type: string }
+        description: { type: string }
+        code: { type: string }
+        imageUrl: { type: string, format: uri }
+        enabled: { type: boolean, default: true }
+        appExclusive: { type: boolean, default: true }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        discount: { $ref: "#/components/schemas/DealDiscount" }
 
     MenuOverrides:
       type: object

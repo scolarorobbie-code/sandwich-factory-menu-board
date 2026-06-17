@@ -36,7 +36,7 @@ export default {
         return json(body);
       }
       if (pathname === "/menu" && method === "GET") return json(await getMenu(env));
-      if (pathname === "/deals" && method === "GET") return json(getDeals());
+      if (pathname === "/deals" && method === "GET") return json(await getDeals(env));
 
       if (pathname === "/auth/register" && method === "POST") return await register(req, env);
       if (pathname === "/auth/login" && method === "POST") return await login(req, env);

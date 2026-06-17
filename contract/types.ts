@@ -415,14 +415,56 @@ export interface ItemOverride {
 }
 
 /**
- * Per-deal override stub. Deals currently come from menu.ts (mock) and will move
- * here so the owner can edit them in the panel. Shape TBD — left as a stub.
+ * Discount a deal applies at checkout. Deals are an APP-SIDE promotional layer
+ * (codes / fixed-amount knock-offs / Stars multipliers) — they are NOT a Square
+ * catalog concept, and that is expected. Square still computes the authoritative
+ * order total in LIVE mode; this spec drives the mock-mode discount and tells the
+ * app what the deal does.
+ *
+ * Kinds:
+ *   - `freeItem`   — knock a fixed `amountCents` off once the cart subtotal meets
+ *                    `minSubtotalCents` (e.g. "free cookie over $15" = a $2.49 credit
+ *                    above a $15 subtotal). Encodes the legacy `deal-free-cookie`.
+ *   - `amountOff`  — knock a fixed `amountCents` off (optionally gated by
+ *                    `minSubtotalCents`). A general fixed-amount promo.
+ *   - `doubleStars`— no checkout discount; a flag that the deal multiplies Stars.
+ *                    Encodes the legacy `deal-double-stars`.
+ */
+export interface DealDiscount {
+  kind: "freeItem" | "amountOff" | "doubleStars";
+  /** Fixed amount knocked off, in cents. Required for freeItem / amountOff. */
+  amountCents?: number;
+  /** Minimum cart subtotal (cents) before the discount applies. Omit = no floor. */
+  minSubtotalCents?: number;
+}
+
+/**
+ * A fully merchant-editable deal. Lives in the overrides store (control panel),
+ * mapped to the app-facing `Deal` contract by the backend. The owner can create,
+ * edit, toggle and remove deals from the dashboard with no code changes — Square
+ * stays the source of truth for prices; this is just the promo layer on top.
  */
 export interface DealOverride {
-  /** Our deal id. */
+  /** Our deal id (stable; used as the map key and at checkout via `dealId`). */
   dealId: string;
-  /** TODO: title/description/code/window/active edited from the panel. */
+  /** Headline shown in the app, e.g. "Free cookie over $15". */
+  title: string;
+  /** Body copy shown in the app. */
+  description: string;
+  /** Promo code the customer applies at checkout, if any. */
+  code?: string;
+  /** Optional image. */
+  imageUrl?: string;
+  /** Off → the deal is hidden from the app and never applies. Defaults true. */
   enabled?: boolean;
+  /** Marketing flag: shown as "APP ONLY" in the app. Defaults true. */
+  appExclusive?: boolean;
+  /** ISO start of the active window. Omit = active immediately. */
+  startsAt?: Timestamp;
+  /** ISO end of the active window. Omit = no end. */
+  endsAt?: Timestamp;
+  /** What the deal does at checkout. Omit = informational only (no discount). */
+  discount?: DealDiscount;
 }
 
 /**
@@ -433,7 +475,7 @@ export interface DealOverride {
 export interface MenuOverrides {
   /** Map of Square ITEM id → item override. */
   items: Record<string, ItemOverride>;
-  /** Map of our deal id → deal override (stub for now). */
+  /** Map of our deal id → deal override (the merchant-managed deals layer). */
   deals: Record<string, DealOverride>;
   /** Last-write timestamp for cache busting / optimistic concurrency. */
   updatedAt: Timestamp;
