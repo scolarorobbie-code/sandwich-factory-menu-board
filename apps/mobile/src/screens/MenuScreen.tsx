@@ -14,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { api } from "../api/client";
+import { QuickStart, type QuickStartHandle } from "../components/QuickStart";
 import { MenuSkeleton } from "../components/Skeleton";
 import * as haptics from "../haptics";
 import { useCart } from "../state/cart";
@@ -46,6 +47,7 @@ export default function MenuScreen() {
 
   const listRef = useRef<SectionList<MenuItem, Section>>(null);
   const pillRef = useRef<FlatList<Section>>(null);
+  const quickStartRef = useRef<QuickStartHandle>(null);
 
   const load = useCallback(async () => {
     try {
@@ -62,6 +64,8 @@ export default function MenuScreen() {
   // Pull-to-refresh: re-fetch the menu, keep showing the current one meanwhile.
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    // Best-effort refresh of the "Your usual" section alongside the menu.
+    quickStartRef.current?.refresh();
     try {
       const fresh = await api.menu();
       setMenu(fresh);
@@ -273,6 +277,9 @@ export default function MenuScreen() {
             keyExtractor={(i) => i.id}
             stickySectionHeadersEnabled
             contentContainerStyle={{ paddingBottom: 110 }}
+            ListHeaderComponent={
+              <QuickStart ref={quickStartRef} menu={menu} onAdded={() => nav.navigate("Cart")} />
+            }
             onViewableItemsChanged={onViewable}
             viewabilityConfig={viewabilityConfig}
             refreshControl={
