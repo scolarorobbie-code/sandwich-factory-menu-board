@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import RootNavigator from "./src/navigation/RootNavigator";
+import { initSquarePayments } from "./src/payments/squarePayments";
 import { setupNotifications } from "./src/push";
 import { AuthProvider, useAuth } from "./src/state/auth";
 import { CartProvider } from "./src/state/cart";
@@ -26,6 +27,10 @@ export default function App() {
   // + Expo Go.
   useEffect(() => {
     setupNotifications();
+    // Initialize Square's card tokenizer with the PUBLIC application id. No-op /
+    // crash-proof in Expo Go + web (the SDK native module isn't present there);
+    // on a real EAS build it readies the on-device card-entry flow.
+    void initSquarePayments();
   }, []);
 
   return (

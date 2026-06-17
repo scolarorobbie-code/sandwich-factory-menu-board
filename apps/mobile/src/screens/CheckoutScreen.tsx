@@ -5,16 +5,16 @@ import { ActivityIndicator, Pressable, StyleSheet, Switch, Text, View } from "re
 import { api } from "../api/client";
 import { Button } from "../components/Button";
 import * as haptics from "../haptics";
+import {
+  CardEntryCancelled,
+  isNativeCardEntryAvailable,
+  requestCardNonce,
+} from "../payments/squarePayments";
 import { useCart } from "../state/cart";
 import { colors, money } from "../theme";
 import type { RootStackParamList } from "../navigation/types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Checkout">;
-
-// In Expo Go we can't run the native Square In-App Payments SDK, so we use
-// Square's sandbox test nonce. On the EAS build this is replaced by the real
-// card token the SDK produces on-device (the backend code path is identical).
-const TEST_CARD_NONCE = "cnon:card-nonce-ok";
 
 /**
  * The best reward the customer can afford with their current balance: the
@@ -85,11 +85,20 @@ export default function CheckoutScreen({ navigation }: Props) {
     setPaying(true);
     setError(null);
     try {
-      const res = await api.pay(order.id, TEST_CARD_NONCE);
+      // On a real EAS build this presents Square's native card-entry UI and
+      // tokenizes the card ON-DEVICE; in Expo Go / sim it resolves the sandbox
+      // test nonce so the flow is unchanged. The backend code path is identical.
+      const { nonce, verificationToken } = await requestCardNonce();
+      const res = await api.pay(order.id, nonce, verificationToken);
       haptics.success();
       cart.clear();
       navigation.replace("OrderStatus", { orderId: res.order.id });
     } catch (e) {
+      // The buyer dismissing the card form is not an error — just stop spinning.
+      if (e instanceof CardEntryCancelled) {
+        setPaying(false);
+        return;
+      }
       haptics.warning();
       setError(e instanceof Error ? e.message : "Payment failed");
       setPaying(false);
@@ -170,7 +179,11 @@ export default function CheckoutScreen({ navigation }: Props) {
       </View>
 
       <View style={styles.footer}>
-        <Text style={styles.testNote}>💳 Sandbox test card — no real charge</Text>
+        <Text style={styles.testNote}>
+          {isNativeCardEntryAvailable()
+            ? "💳 Enter your card on the next screen — secured by Square"
+            : "💳 Sandbox test card — no real charge"}
+        </Text>
         <View style={{ height: 8 }} />
         <Button title={`Pay ${money(order.total)}`} onPress={pay} loading={paying} disabled={recalculating} />
       </View>
