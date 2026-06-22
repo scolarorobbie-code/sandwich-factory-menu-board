@@ -1,7 +1,7 @@
 import type { Modifier, ModifierGroup } from "@sf/contract";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useEffect, useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { Alert, Animated, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { api } from "../api/client";
 import { Button } from "../components/Button";
 import * as haptics from "../haptics";
@@ -72,6 +72,7 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
   );
   const [quantity, setQuantity] = useState(1);
   const [note, setNote] = useState("");
+  const addBtnScale = useRef(new Animated.Value(1)).current;
 
   function toggleExpand(id: string) {
     setExpanded((prev) => {
@@ -148,7 +149,12 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
   function addToCart() {
     haptics.tapMedium();
     cart.add(item, variation, chosenMods, quantity, note.trim() || undefined);
-    navigation.goBack();
+    // Brief press-scale animation, then navigate. The animation runs in parallel
+    // with cart update so there's no added latency.
+    Animated.sequence([
+      Animated.timing(addBtnScale, { toValue: 0.93, duration: 55, useNativeDriver: true }),
+      Animated.spring(addBtnScale, { toValue: 1, speed: 18, bounciness: 10, useNativeDriver: true }),
+    ]).start(() => navigation.goBack());
   }
 
   async function persistFavorite(label: string) {
@@ -289,13 +295,13 @@ export default function ItemDetailScreen({ route, navigation }: Props) {
               <Text style={styles.heartIcon}>♡</Text>
             </Pressable>
           ) : null}
-          <View style={{ flex: 1 }}>
+          <Animated.View style={{ flex: 1, transform: [{ scale: addBtnScale }] }}>
             <Button
               title={missing.length ? `Choose ${missing[0].name}` : `Add ${quantity} · ${dollars(unit * quantity)}`}
               onPress={addToCart}
               disabled={missing.length > 0}
             />
-          </View>
+          </Animated.View>
         </View>
       </View>
     </View>

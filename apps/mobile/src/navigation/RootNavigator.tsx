@@ -2,6 +2,8 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { DarkTheme, NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { useEffect, useRef } from "react";
+import { Animated } from "react-native";
 import { useCart } from "../state/cart";
 import { colors } from "../theme";
 import { Brandmark } from "../components/Brandmark";
@@ -21,6 +23,19 @@ const Tab = createBottomTabNavigator<TabParamList>();
 
 function Tabs() {
   const cart = useCart();
+  // Bounce the Menu tab icon whenever an item is added to the cart.
+  const iconScale = useRef(new Animated.Value(1)).current;
+  const prevCount = useRef(cart.count);
+  useEffect(() => {
+    if (cart.count > prevCount.current) {
+      Animated.sequence([
+        Animated.timing(iconScale, { toValue: 1.3, duration: 70, useNativeDriver: true }),
+        Animated.spring(iconScale, { toValue: 1, speed: 14, bounciness: 14, useNativeDriver: true }),
+      ]).start();
+    }
+    prevCount.current = cart.count;
+  }, [cart.count, iconScale]);
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -36,7 +51,11 @@ function Tabs() {
         name="Menu"
         component={MenuScreen}
         options={{
-          tabBarIcon: ({ color, size }) => <Ionicons name="restaurant-outline" size={size} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+              <Ionicons name="restaurant-outline" size={size} color={color} />
+            </Animated.View>
+          ),
           tabBarBadge: cart.count || undefined,
           headerTitle: () => <Brandmark />,
           headerTitleAlign: "center",
