@@ -159,11 +159,20 @@ export default function CheckoutScreen({ navigation, route }: Props) {
 
         <View style={styles.summary}>
           {order.lineItems.map((l, i) => (
-            <View key={i} style={styles.line}>
-              <Text style={styles.lineName}>
-                {l.quantity}× {l.name}
-              </Text>
-              <Text style={styles.linePrice}>{money(l.total)}</Text>
+            <View key={i} style={styles.lineBlock}>
+              <View style={styles.line}>
+                <Text style={styles.lineName}>
+                  {l.quantity}× {l.name}
+                </Text>
+                <Text style={styles.linePrice}>{money(l.total)}</Text>
+              </View>
+              {(l.variationName || l.modifiers.length > 0 || l.note) ? (
+                <Text style={styles.lineDetail}>
+                  {[l.variationName, ...l.modifiers.map((m) => m.name), l.note ? `"${l.note}"` : null]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </Text>
+              ) : null}
             </View>
           ))}
           <View style={styles.divider} />
@@ -286,9 +295,11 @@ const styles = StyleSheet.create({
   heading: { color: colors.text, fontSize: 24, fontWeight: "800" },
   muted: { color: colors.muted, fontSize: 14, marginTop: 4 },
   summary: { backgroundColor: colors.card, borderRadius: 16, padding: 18, marginTop: 24, borderWidth: 1, borderColor: colors.line },
-  line: { flexDirection: "row", justifyContent: "space-between", marginVertical: 4 },
+  lineBlock: { marginVertical: 4 },
+  line: { flexDirection: "row", justifyContent: "space-between" },
   lineName: { color: colors.text, fontSize: 15, flex: 1 },
   linePrice: { color: colors.text, fontSize: 15 },
+  lineDetail: { color: colors.muted, fontSize: 13, marginTop: 2, marginLeft: 2 },
   divider: { height: 1, backgroundColor: colors.line, marginVertical: 12 },
   rowLabel: { color: colors.muted, fontSize: 15 },
   bold: { color: colors.text, fontSize: 18, fontWeight: "800" },

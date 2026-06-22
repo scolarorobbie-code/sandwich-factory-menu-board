@@ -1,8 +1,9 @@
 import type { CartLineItem, Favorite, Loyalty, Menu, Order } from "@sf/contract";
+import Ionicons from "@expo/vector-icons/Ionicons";
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { api } from "../api/client";
 import { Button } from "../components/Button";
 import * as haptics from "../haptics";
@@ -23,15 +24,28 @@ export default function AccountScreen() {
   const [menu, setMenu] = useState<Menu | null>(null);
   // Order id currently being re-added, for inline disabled feedback.
   const [busy, setBusy] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  function loadData() {
+    if (!customer) return;
+    api.loyalty().then(setLoyalty).catch(() => {});
+    api.orderHistory().then((p) => setOrders(p.items)).catch(() => {});
+    api.favorites().then(setFavorites).catch(() => {});
+    api.menu().then(setMenu).catch(() => {});
+  }
+
+  async function onRefresh() {
+    setRefreshing(true);
+    loadData();
+    // Give requests a moment to settle before hiding the spinner.
+    await new Promise((r) => setTimeout(r, 800));
+    setRefreshing(false);
+  }
 
   useFocusEffect(
     useCallback(() => {
-      if (!customer) return;
-      api.loyalty().then(setLoyalty).catch(() => {});
-      api.orderHistory().then((p) => setOrders(p.items)).catch(() => {});
-      api.favorites().then(setFavorites).catch(() => {});
-      // Menu is needed to resolve reorders/favorites against today's catalog.
-      api.menu().then(setMenu).catch(() => {});
+      loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customer]),
   );
 
@@ -142,7 +156,13 @@ export default function AccountScreen() {
   }
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={{ padding: 20 }}>
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={{ padding: 20 }}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.accent2} colors={[colors.accent2]} />
+      }
+    >
       <View style={styles.headerRow}>
         <Text style={styles.hello} onLongPress={makeStaffTablet}>
           Hi, {customer.firstName} 👋
@@ -155,7 +175,7 @@ export default function AccountScreen() {
           accessibilityLabel="Settings"
           accessibilityHint="Notifications and profile"
         >
-          <Text style={styles.settingsIcon}>⚙︎</Text>
+          <Ionicons name="settings-outline" size={18} color={colors.accent2} style={{ marginRight: 5 }} />
           <Text style={styles.settingsText}>Settings</Text>
         </Pressable>
       </View>
@@ -282,7 +302,6 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   hello: { color: colors.text, fontSize: 26, fontWeight: "800", flex: 1 },
   settingsBtn: { flexDirection: "row", alignItems: "center", paddingVertical: 6, paddingHorizontal: 10, marginLeft: 10 },
-  settingsIcon: { color: colors.accent2, fontSize: 18, marginRight: 5 },
   settingsText: { color: colors.accent2, fontSize: 15, fontWeight: "700" },
   muted: { color: colors.muted, fontSize: 15, marginTop: 8, lineHeight: 21 },
   starCard: { backgroundColor: colors.card, borderRadius: 18, padding: 22, marginTop: 20, borderWidth: 1, borderColor: colors.line, alignItems: "center" },
