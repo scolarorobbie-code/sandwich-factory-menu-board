@@ -160,14 +160,29 @@ export default function AccountScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.starCard} accessibilityLabel={`${loyalty?.stars ?? 0} Stars`}>
+      <View
+        style={styles.starCard}
+        accessibilityLabel={`${loyalty?.stars ?? 0} Stars${loyalty?.rewards?.length ? `. Next reward: ${loyalty.rewards[0].name} at ${loyalty.rewards[0].cost} Stars` : ""}`}
+      >
         <Text style={styles.starCount}>⭐ {loyalty?.stars ?? 0}</Text>
         <Text style={styles.starLabel}>Stars</Text>
         <Text style={styles.earnRule}>{loyalty?.earnRule ?? "1 Star per $1 spent"}</Text>
         {loyalty?.rewards?.length ? (
-          <Text style={styles.reward}>
-            Next reward: {loyalty.rewards[0].name} at {loyalty.rewards[0].cost} Stars
-          </Text>
+          <>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min(100, Math.round(((loyalty.stars) / loyalty.rewards[0].cost) * 100))}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.reward}>
+              {loyalty.stars >= loyalty.rewards[0].cost
+                ? `🎉 You can redeem: ${loyalty.rewards[0].name}!`
+                : `${loyalty.stars} / ${loyalty.rewards[0].cost} Stars → ${loyalty.rewards[0].name}`}
+            </Text>
+          </>
         ) : null}
       </View>
 
@@ -274,7 +289,9 @@ const styles = StyleSheet.create({
   starCount: { color: colors.accent2, fontSize: 44, fontWeight: "900" },
   starLabel: { color: colors.text, fontSize: 16, fontWeight: "700", letterSpacing: 2 },
   earnRule: { color: colors.muted, fontSize: 14, marginTop: 8 },
-  reward: { color: colors.cyan, fontSize: 14, marginTop: 6 },
+  progressTrack: { width: "100%", height: 8, backgroundColor: colors.line, borderRadius: 999, marginTop: 14, overflow: "hidden" },
+  progressFill: { height: "100%", backgroundColor: colors.accent2, borderRadius: 999 },
+  reward: { color: colors.accent2, fontSize: 14, marginTop: 8, fontWeight: "600" },
   section: { color: colors.accent2, fontSize: 20, fontWeight: "800", marginTop: 28, marginBottom: 12 },
   emptyBlock: { alignItems: "center", paddingVertical: 16, gap: 4 },
   emptyEmoji: { fontSize: 34, marginBottom: 2 },

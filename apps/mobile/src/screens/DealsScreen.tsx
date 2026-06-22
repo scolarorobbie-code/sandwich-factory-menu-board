@@ -1,12 +1,26 @@
 import type { Deal } from "@sf/contract";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
-import { FlatList, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { api } from "../api/client";
 import { Skeleton } from "../components/Skeleton";
+import { useCart } from "../state/cart";
 import { colors } from "../theme";
+import type { RootStackParamList } from "../navigation/types";
 
 export default function DealsScreen() {
   const [deals, setDeals] = useState<Deal[] | null>(null);
+  const nav = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const cart = useCart();
+
+  function applyDeal(dealId: string) {
+    if (cart.count === 0) {
+      Alert.alert("Add items first", "Add something from the menu, then come back to apply this deal at checkout.");
+      return;
+    }
+    nav.navigate("Checkout", { dealId });
+  }
 
   useEffect(() => {
     api.deals().then(setDeals).catch(() => setDeals([]));
@@ -55,6 +69,15 @@ export default function DealsScreen() {
             <Text style={styles.dealTitle}>{item.title}</Text>
             <Text style={styles.desc}>{item.description}</Text>
             {item.code ? <Text style={styles.code}>Code: {item.code}</Text> : null}
+            <Pressable
+              style={styles.applyBtn}
+              onPress={() => applyDeal(item.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Apply deal: ${item.title}`}
+              accessibilityHint="Goes to checkout with this deal applied"
+            >
+              <Text style={styles.applyBtnText}>Apply at checkout →</Text>
+            </Pressable>
           </View>
         )}
       />
@@ -74,4 +97,6 @@ const styles = StyleSheet.create({
   dealTitle: { color: colors.text, fontSize: 19, fontWeight: "800" },
   desc: { color: colors.muted, fontSize: 15, marginTop: 6, lineHeight: 21 },
   code: { color: colors.accent2, fontSize: 14, fontWeight: "700", marginTop: 10 },
+  applyBtn: { marginTop: 14, backgroundColor: colors.accent, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 20, alignSelf: "flex-start" },
+  applyBtnText: { color: "#fff", fontSize: 14, fontWeight: "800" },
 });

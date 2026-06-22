@@ -63,6 +63,11 @@ export default function CartScreen({ navigation }: Props) {
           <Text style={styles.totalValue}>{dollars(cart.subtotal)}</Text>
         </View>
         <Text style={styles.muted}>Tax calculated at checkout · Pickup only</Text>
+        {cart.subtotal > 0 && customer ? (
+          <Text style={styles.starsPreview}>
+            ⭐ You'll earn ~{Math.floor(cart.subtotal / 100)} Stars on this order
+          </Text>
+        ) : null}
         <View style={{ height: 12 }} />
         <Button title="Go to checkout" onPress={checkout} />
       </View>
@@ -83,6 +88,7 @@ const styles = StyleSheet.create({
   remove: { color: colors.accent, fontSize: 14, marginTop: 8, fontWeight: "600" },
   price: { color: colors.accent2, fontSize: 17, fontWeight: "800", marginLeft: 12 },
   footer: { padding: 16, borderTopWidth: 1, borderTopColor: colors.line, backgroundColor: colors.bg2 },
+  starsPreview: { color: colors.accent2, fontSize: 13, marginTop: 6, fontWeight: "600" },
   totalRow: { flexDirection: "row", justifyContent: "space-between" },
   totalLabel: { color: colors.text, fontSize: 18, fontWeight: "800" },
   totalValue: { color: colors.text, fontSize: 18, fontWeight: "800" },

@@ -31,14 +31,14 @@ function bestAffordableReward(loyalty: Loyalty | null): LoyaltyReward | null {
   );
 }
 
-export default function CheckoutScreen({ navigation }: Props) {
+export default function CheckoutScreen({ navigation, route }: Props) {
   const cart = useCart();
   const [order, setOrder] = useState<Order | null>(null);
   const [loyalty, setLoyalty] = useState<Loyalty | null>(null);
   const [redeem, setRedeem] = useState(false);
   // App-exclusive deals the customer can apply at checkout, + the chosen one.
   const [deals, setDeals] = useState<Deal[]>([]);
-  const [dealId, setDealId] = useState<string | undefined>(undefined);
+  const [dealId, setDealId] = useState<string | undefined>(route.params?.dealId);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   // Disables the toggle/deal controls while we re-create the order.
@@ -58,9 +58,10 @@ export default function CheckoutScreen({ navigation }: Props) {
   }
 
   useEffect(() => {
+    const initialDealId = route.params?.dealId;
     (async () => {
       try {
-        await buildOrder(false, undefined);
+        await buildOrder(false, initialDealId);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Couldn't start checkout");
       }

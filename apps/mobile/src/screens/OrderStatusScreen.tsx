@@ -154,19 +154,21 @@ export default function OrderStatusScreen({ route }: Props) {
 
       <View style={{ flex: 1 }} />
 
-      <View style={styles.footer}>
-        <Text style={styles.devNote}>
-          For testing: tap below to act as the kitchen and advance the status (normally Square POS does this).
-        </Text>
-        <View style={{ height: 8 }} />
-        <Button
-          title="Simulate staff updating the order"
-          variant="secondary"
-          onPress={simulateStaff}
-          loading={advancing}
-          disabled={order.status === "COMPLETED"}
-        />
-      </View>
+      {__DEV__ && (
+        <View style={styles.footer}>
+          <Text style={styles.devNote}>
+            For testing: tap below to act as the kitchen and advance the status (normally Square POS does this).
+          </Text>
+          <View style={{ height: 8 }} />
+          <Button
+            title="Simulate staff updating the order"
+            variant="secondary"
+            onPress={simulateStaff}
+            loading={advancing}
+            disabled={order.status === "COMPLETED"}
+          />
+        </View>
+      )}
     </View>
   );
 }
