@@ -140,6 +140,36 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   fixed two build-breakers: missing `expo-build-properties` install and an iOS
   deployment target below Expo SDK 56's floor.
 
+## Landed in the polish pass (2026-06-22, green, pushed — commits 6766f28, a453c05, 4960db5)
+- **Real tab bar icons** — replaced emoji (🥪🔥⭐) with Ionicons `restaurant` /
+  `pricetag` / `person-circle` (filled when active, outline when inactive). Installs
+  `@expo/vector-icons ^15.1.1`.
+- **Deals are now actionable** — "Apply at checkout →" button on every deal card in the
+  Deals tab. Navigates directly to Checkout with that deal pre-applied (shows an Alert
+  if the cart is empty). CheckoutScreen also accepts a `dealId` route param so the
+  Deals tab and deep-links can pre-select a deal.
+- **Stars earn preview in Cart** — signed-in users see "⭐ You'll earn ~X Stars" in the
+  cart footer on every order build.
+- **Loyalty progress bar** — AccountScreen Stars card now shows a filled progress bar
+  toward the next reward tier; copy switches to "🎉 You can redeem!" when the balance
+  reaches the threshold.
+- **Dev-only simulate button** — "Simulate staff updating the order" is now wrapped in
+  `__DEV__` so it is invisible in the production EAS build but still works in Expo Go
+  / dev builds where you need it.
+- **Checkout shows full customization** — variation name + modifier list + kitchen note
+  appear under each line item in the checkout summary (e.g. "6 inch · Herb & Cheese ·
+  Extra bacon") so customers can verify their exact build before paying.
+- **Account pull-to-refresh** — pull down to reload loyalty, order history, favorites,
+  and the menu catalog.
+- **Settings icon** — replaced the ⚙︎ text character in AccountScreen with Ionicons
+  `settings-outline`.
+- **Apple Sign-In button** (`apps/mobile/src/auth/appleAuth.ts`) — same lazy-require
+  pattern as Square payments. `isAppleAuthAvailable()` checks at runtime whether
+  `expo-apple-authentication` is installed AND the device supports it. AuthScreen shows
+  a black "Sign in with Apple" button with an or-divider when available; renders nothing
+  in Expo Go / Android / when the module is missing (no placeholder text clutter). The
+  module stays out of package.json until the EAS build session.
+
 ## Decisions (owner-confirmed)
 - Photos: real Square + AI fallback. Brand: **match website** (awaiting his logo +
   colors — site is bot-blocked, he must send the image). Customization: collapsible.
@@ -150,9 +180,9 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
   modifiers, hide items, prep time, deals). Tracked in CLAUDE.md.
 
 ## Next steps (in priority order)
-1. **`npm install` on his Mac** — REQUIRED now (new deps: `expo-haptics`,
-   `expo-notifications`, `vitest`). Then `npm run add-drink-set`, restart backend,
-   ⌘R, and confirm a combo → "Choose Your Drink" appears.
+1. **`npm install` on his Mac** — REQUIRED (new deps added: `expo-haptics`,
+   `expo-notifications`, `expo-build-properties`, `@expo/vector-icons`). Run once,
+   then `npm run add-drink-set`, restart backend, ⌘R, confirm combo → drink appears.
 2. **Run a real end-to-end test order** — the full flow is built and ready.
    See the test protocol below.
 3. **Branding** — scaffold is READY (one file: `apps/mobile/src/brand.ts` +
@@ -160,20 +190,17 @@ All work is on `claude/new-session-u4xoyc` (PR #1 open against `main`).
    hex colors + storefront/food photos. Once he does it's a quick drop-in, not a
    rebuild. This is the #1 thing only he can unblock.
 4. **EAS dev build** — the gate for testing what Expo Go can't: real Square
-   In-App Payments AND real push delivery. Needs his Expo + Apple accounts.
-   **Runbook is ready: `docs/EAS_AND_PAYMENTS.md`** (install the Square SDK +
-   expo-build-properties, `eas build --profile development`, test on a physical
-   iPhone). Production path: `npx testflight`.
-5. **Control panel — DONE.** Deals are now managed in-panel (the last open item):
-   `DealOverride` is a full deal definition (+ `DealDiscount`), `getDeals(env)`
-   reads them from the KV-backed overrides store (seeded with the two launch
-   deals when empty), checkout applies the discount from the override spec, and
-   `admin.html` has a Deals section (list/add/edit/remove/toggle). KV persistence,
-   prep-time→pickup_at, and mobile reading conditional overrides were already DONE.
-   See `docs/CONTROL_PANEL.md` — nothing control-panel-related remains.
+   In-App Payments, real push delivery, AND Apple Sign-In. Needs his Expo + Apple
+   accounts. **Runbook is ready: `docs/EAS_AND_PAYMENTS.md`**. Production path:
+   `npx testflight`. Apple Sign-In button shows automatically on the EAS build
+   (lazy-require — it's absent in Expo Go, no placeholder clutter).
+5. **Control panel — DONE.** See `docs/CONTROL_PANEL.md`.
 6. **Loyalty — to actually test Stars:** sandbox needs an ACTIVE loyalty program
    configured; loyalty maps by phone (now captured at sign-up).
-7. **Work the competitive punch-list** in `docs/COMPETITIVE_ANALYSIS.md`.
+7. **Competitive punch-list** — all punch-list items from `docs/COMPETITIVE_ANALYSIS.md`
+   are now done or owner-blocked (real food photos = owner must shoot/upload to Square).
+   Remaining from the premium look & feel checklist: add-to-cart animation + animated
+   cart badge (motion polish). Everything else is shipped.
 
 ## Test order protocol (Phase 1 verification)
 Do this to prove the real square loop works:
