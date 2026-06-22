@@ -3,17 +3,25 @@ import type { CartLineItem, Menu, MenuItem, Order, OrderLineItem } from "@sf/con
 /**
  * One-tap reorder bridge.
  *
- * A past `Order` only stores DISPLAY data per line (item name, variation name,
- * modifier names) — not the Square catalog ids the cart/API need (the backend
- * doesn't snapshot the original cart; see services/backend/src/account.ts). To
- * reorder we resolve those names back to ids against the CURRENT menu, so the
- * rebuild always reflects today's catalog/prices (Square stays source of truth).
+ * When the order carries a `cartLineItems` snapshot (all orders placed after
+ * June 2026) we validate each line against the CURRENT menu for availability
+ * and silently drop anything that's been removed or sold out, but we keep the
+ * exact catalog ids — no name-matching needed.
  *
- * Anything that can't be matched (item renamed/removed, variation gone, modifier
- * dropped) is skipped and counted so the UI can tell the customer.
+ * For older orders without the snapshot we fall back to resolving display names
+ * back to ids against the current menu. Anything that can't be matched
+ * (item renamed/removed, variation gone, modifier dropped) is skipped.
  */
 
 const norm = (s: string) => s.trim().toLowerCase();
+
+function findItemById(menu: Menu, itemId: string): MenuItem | undefined {
+  for (const c of menu.categories) {
+    const found = c.items.find((i) => i.id === itemId);
+    if (found) return found;
+  }
+  return undefined;
+}
 
 function findItemByName(menu: Menu, name: string): MenuItem | undefined {
   const target = norm(name);
@@ -22,6 +30,26 @@ function findItemByName(menu: Menu, name: string): MenuItem | undefined {
     if (found) return found;
   }
   return undefined;
+}
+
+/**
+ * Validate a snapshotted CartLineItem against the live menu.
+ * Returns null if the item/variation is gone or unavailable.
+ * Silently drops modifiers that are no longer in the catalog.
+ */
+function validateCartLine(menu: Menu, line: CartLineItem): CartLineItem | null {
+  const item = findItemById(menu, line.itemId);
+  if (!item || !item.available) return null;
+
+  const variation = item.variations.find((v) => v.id === line.variationId);
+  if (!variation || !variation.available) return null;
+
+  const allMods = item.modifierGroups.flatMap((g) => g.modifiers);
+  const modifierIds = line.modifierIds.filter(
+    (id) => allMods.some((m) => m.id === id && m.available),
+  );
+
+  return { ...line, modifierIds };
 }
 
 /** Resolve a single historical order line into a cart line item, or null. */
@@ -51,13 +79,21 @@ function resolveLine(menu: Menu, line: OrderLineItem): CartLineItem | null {
 
 export interface ReorderPlan {
   lineItems: CartLineItem[];
-  /** Lines that couldn't be matched to the current menu. */
+  /** Lines that couldn't be matched / validated against the current menu. */
   skipped: number;
   total: number;
 }
 
 /** Map a past order's line items back to cart line items against the live menu. */
 export function planReorder(menu: Menu, order: Order): ReorderPlan {
+  if (order.cartLineItems?.length) {
+    const lineItems = order.cartLineItems
+      .map((l) => validateCartLine(menu, l))
+      .filter((l): l is CartLineItem => l !== null);
+    return { lineItems, skipped: order.cartLineItems.length - lineItems.length, total: order.cartLineItems.length };
+  }
+
+  // Legacy path: resolve display names back to catalog ids.
   const lineItems = order.lineItems
     .map((l) => resolveLine(menu, l))
     .filter((l): l is CartLineItem => l !== null);

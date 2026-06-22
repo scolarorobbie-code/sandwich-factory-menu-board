@@ -157,6 +157,13 @@ export interface Order {
   displayNumber: string;
   status: OrderStatus;
   lineItems: OrderLineItem[];
+  /**
+   * Original cart snapshot saved at order-creation time. Enables exact-id
+   * reorders (no name-matching) and "save to favorites" from order history.
+   * Present on all orders created after this field was added; absent on older
+   * orders (app falls back to name-matching in reorder.ts).
+   */
+  cartLineItems?: CartLineItem[];
   subtotal: Money;
   tax: Money;
   /** Loyalty / deal discounts applied. */
@@ -324,12 +331,12 @@ export interface Favorite {
 
 export interface CreateFavoriteRequest {
   name: string;
-  /** The build to save. Currently REQUIRED — the only supported path. */
+  /** Explicit cart to save. Takes precedence over `fromOrderId`. */
   lineItems?: CartLineItem[];
   /**
-   * NOT YET SUPPORTED. Saving a favorite directly from a past order is rejected
-   * (422) because stored orders don't retain modifier ids; reconstructing the
-   * cart needs an order-time cart snapshot (future work). Send `lineItems`.
+   * Save a favorite directly from a past order. Requires the order to carry
+   * a `cartLineItems` snapshot (present on all orders created after June 2026).
+   * Older orders without the snapshot are rejected with 422 — use `lineItems`.
    */
   fromOrderId?: string;
 }

@@ -40,10 +40,10 @@ export async function addFavorite(req: Request, _env: Env, user: StoredUser): Pr
   if (!lineItems && body.fromOrderId) {
     const order = store.getOrder(body.fromOrderId);
     if (!order) return error("NOT_FOUND", "Source order not found", 404);
-    // Rebuild a cart from the past order's line items (names -> ids isn't stored
-    // on Order; in production we snapshot the original cart. Mock keeps it empty
-    // and lets the app re-add). For now require explicit lineItems.
-    return error("VALIDATION_FAILED", "Provide lineItems to save this favorite", 422);
+    if (!order.cartLineItems?.length) {
+      return error("VALIDATION_FAILED", "This order predates cart snapshots — provide lineItems instead", 422);
+    }
+    lineItems = order.cartLineItems;
   }
   if (!lineItems?.length) return error("VALIDATION_FAILED", "lineItems required", 422);
 

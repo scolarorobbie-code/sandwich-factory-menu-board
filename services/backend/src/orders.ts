@@ -181,6 +181,7 @@ export async function createOrder(req: Request, env: Env, user: StoredUser): Pro
     displayNumber: nextDisplayNumber(),
     status: "DRAFT",
     lineItems,
+    cartLineItems: body.lineItems,
     subtotal: subtotalM,
     tax: taxM,
     discount: discountM,
