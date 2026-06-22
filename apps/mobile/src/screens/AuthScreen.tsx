@@ -1,7 +1,8 @@
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Button } from "../components/Button";
+import { AppleSignInCancelled, isAppleAuthAvailable, requestAppleCredential } from "../auth/appleAuth";
 import { useAuth } from "../state/auth";
 import { colors } from "../theme";
 import type { RootStackParamList } from "../navigation/types";
@@ -9,7 +10,7 @@ import type { RootStackParamList } from "../navigation/types";
 type Props = NativeStackScreenProps<RootStackParamList, "Auth">;
 
 export default function AuthScreen({ route, navigation }: Props) {
-  const { signIn, signUp } = useAuth();
+  const { signIn, signUp, signInWithApple } = useAuth();
   const next = route.params?.next;
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [firstName, setFirstName] = useState("");
@@ -18,6 +19,11 @@ export default function AuthScreen({ route, navigation }: Props) {
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+
+  useEffect(() => {
+    isAppleAuthAvailable().then(setAppleAvailable);
+  }, []);
 
   // Loose check only — warn, never block. Square wants E.164 (or a bare 10-digit
   // US number it can coerce). An empty phone is always fine (it's optional).
@@ -25,6 +31,25 @@ export default function AuthScreen({ route, navigation }: Props) {
   const phoneDigits = phoneTrimmed.replace(/\D/g, "");
   const phoneLooksOff =
     phoneTrimmed.length > 0 && !(phoneDigits.length === 10 || (phoneDigits.length === 11 && phoneDigits.startsWith("1")) || /^\+[1-9]\d{6,14}$/.test(phoneTrimmed));
+
+  async function appleSignIn() {
+    setBusy(true);
+    setError(null);
+    try {
+      const cred = await requestAppleCredential();
+      await signInWithApple(cred);
+      if (next === "Checkout") navigation.replace("Checkout");
+      else navigation.goBack();
+    } catch (e) {
+      if (e instanceof AppleSignInCancelled) {
+        /* user dismissed — not an error */
+      } else {
+        setError(e instanceof Error ? e.message : "Apple Sign-In failed");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit() {
     setBusy(true);
@@ -103,9 +128,24 @@ export default function AuthScreen({ route, navigation }: Props) {
         </Text>
       </Pressable>
 
-      <Text style={styles.appleNote}>
-        Sign in with Apple will appear here on the EAS build (it needs native code, not available in Expo Go).
-      </Text>
+      {appleAvailable ? (
+        <>
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+          <Pressable
+            style={[styles.appleBtn, busy && { opacity: 0.7 }]}
+            onPress={appleSignIn}
+            disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel="Sign in with Apple"
+          >
+            <Text style={styles.appleBtnText}> Sign in with Apple</Text>
+          </Pressable>
+        </>
+      ) : null}
     </View>
   );
 }
@@ -119,5 +159,9 @@ const styles = StyleSheet.create({
   phoneHint: { color: colors.muted, fontSize: 12, marginTop: -4, marginBottom: 12, lineHeight: 17 },
   phoneWarn: { color: colors.accent2, fontSize: 12, marginTop: -4, marginBottom: 12, lineHeight: 17 },
   toggle: { color: colors.cyan, fontSize: 15, textAlign: "center" },
-  appleNote: { color: colors.muted, fontSize: 12, marginTop: 28, textAlign: "center", lineHeight: 18 },
+  dividerRow: { flexDirection: "row", alignItems: "center", marginTop: 24, marginBottom: 8, gap: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.line },
+  dividerText: { color: colors.muted, fontSize: 13 },
+  appleBtn: { backgroundColor: "#000", borderRadius: 12, padding: 16, alignItems: "center", marginTop: 8 },
+  appleBtnText: { color: "#fff", fontSize: 16, fontWeight: "700" },
 });
