@@ -1,0 +1,59 @@
+name = "sandwich-factory-backend"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Bundle the merchant control-panel HTML as a text module so `GET /admin` can
+# serve it inline (Workers have no runtime filesystem). See src/index.ts +
+# public/admin.html.
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
+
+# Non-secret config. Real secrets (SQUARE_ACCESS_TOKEN, SQUARE_WEBHOOK_SIGNATURE_KEY,
+# JWT_SIGNING_SECRET, ADMIN_PASSWORD) are set with `wrangler secret put <NAME>`
+# and NEVER committed.
+#
+# ADMIN_PASSWORD gates the control panel (POST /admin/login). When unset, the
+# panel is open in sandbox/dev only and disabled in production. Set it before
+# going live:  wrangler secret put ADMIN_PASSWORD
+[vars]
+SQUARE_ENVIRONMENT = "sandbox"
+SQUARE_API_VERSION = "2026-01-22"
+# Leave blank to run on mock data. Fill these (non-secret) when you connect Square sandbox:
+SQUARE_LOCATION_ID = ""
+SQUARE_APPLICATION_ID = ""
+
+# --- Staff (kitchen tablet) notifications ---
+# NTFY_TOPIC: backup new-order channel. Pick any hard-to-guess topic name, then
+#   subscribe to it in the free ntfy app on the tablet. Leave blank to skip.
+NTFY_TOPIC = ""
+# STAFF_PUSH_TOKEN: simplest way to point new-order push at the tablet. On the
+#   tablet, sign in and open the app once — it logs its ExponentPushToken; paste
+#   it here. (Alternative: long-press the Account greeting → "Make it the tablet"
+#   registers it dynamically, no config needed.) Leave blank to use that path.
+STAFF_PUSH_TOKEN = ""
+
+# --- KV namespaces ---
+# Local `wrangler dev` provides a SIMULATED KV for each binding automatically, so
+# you do NOT need to create these to develop locally — overrides already persist
+# in the dev simulator and reset only if you wipe `.wrangler/`. Create the real
+# namespaces (and paste the returned ids) before `wrangler deploy` so production
+# data is durable.
+
+# Idempotency + webhook de-dupe storage. Create with:
+#   cd services/backend && npx wrangler kv namespace create IDEMPOTENCY
+# then paste the returned id below.
+# [[kv_namespaces]]
+# binding = "IDEMPOTENCY"
+# id = "<your-kv-namespace-id>"
+
+# Merchant control-panel menu overrides (hide/sold-out, required/min/max,
+# conditional rules, prep time). Without this binding the overrides live only in
+# the Worker's memory and reset on every restart/redeploy. Create with:
+#   cd services/backend && npx wrangler kv namespace create OVERRIDES
+# then paste the returned id below.
+# [[kv_namespaces]]
+# binding = "OVERRIDES"
+# id = "<your-kv-namespace-id>"

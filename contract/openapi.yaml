@@ -1,0 +1,943 @@
+openapi: 3.1.0
+info:
+  title: Sandwich Factory Ordering API
+  version: 0.1.0
+  description: >
+    Contract between the Sandwich Factory mobile app (React Native + Expo) and
+    the backend (Cloudflare Workers). The backend is the only component that
+    holds Square credentials. Pickup only — no delivery. Cards are tokenized
+    on-device by the Square In-App Payments SDK; the API only ever sees an opaque
+    payment token (sourceId). Keep in sync with types.ts.
+servers:
+  - url: https://api.sandwichfactorytn.com
+    description: Production backend
+  - url: https://sandbox-api.sandwichfactorytn.com
+    description: Sandbox backend (Square sandbox)
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Menu
+  - name: Auth
+  - name: Orders
+  - name: Payments
+  - name: Loyalty
+  - name: Deals
+  - name: Favorites
+  - name: Devices
+  - name: System
+  - name: Webhooks
+  - name: Admin
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Liveness + environment info
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Health" }
+
+  /menu:
+    get:
+      tags: [Menu]
+      summary: Full menu, proxied + cached from Square Catalog
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Menu" }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Create an account (email + password)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in with email + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /auth/apple:
+    post:
+      tags: [Auth]
+      summary: Sign in with Apple
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AppleAuthRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthResponse" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for new tokens
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401": { $ref: "#/components/responses/Error" }
+
+  /me:
+    get:
+      tags: [Auth]
+      summary: Current customer profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "401": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [Auth]
+      summary: Update the signed-in customer's profile (name / phone)
+      description: >
+        Additive partial update. Only the provided fields change. Email/identity
+        are not editable here. Phone lets Apple Sign-In users (who have none) add
+        one so they can map into Square Loyalty.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateProfileRequest" }
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Customer" }
+        "401": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /orders:
+    get:
+      tags: [Orders]
+      summary: Order history for the current customer
+      parameters:
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/Paginated"
+                  - type: object
+                    properties:
+                      items:
+                        type: array
+                        items: { $ref: "#/components/schemas/Order" }
+    post:
+      tags: [Orders]
+      summary: Create an order in Square (not yet paid)
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateOrderRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreateOrderResponse" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /orders/{orderId}:
+    get:
+      tags: [Orders]
+      summary: Fetch a single order (poll for status; push is primary)
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /payments:
+    post:
+      tags: [Payments]
+      summary: Pay for an order with an on-device card token
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreatePaymentRequest" }
+      responses:
+        "200":
+          description: Paid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CreatePaymentResponse" }
+        "402": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /loyalty:
+    get:
+      tags: [Loyalty]
+      summary: Current customer's Stars balance + reward tiers
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Loyalty" }
+
+  /deals:
+    get:
+      tags: [Deals]
+      summary: Active app-exclusive deals
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Deal" }
+
+  /favorites:
+    get:
+      tags: [Favorites]
+      summary: Saved favorites for one-tap reorder
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Favorite" }
+    post:
+      tags: [Favorites]
+      summary: Save a favorite (from scratch or from a past order)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateFavoriteRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Favorite" }
+
+  /favorites/{favoriteId}:
+    delete:
+      tags: [Favorites]
+      summary: Remove a favorite
+      parameters:
+        - name: favoriteId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /devices:
+    post:
+      tags: [Devices]
+      summary: Register an Expo push token for status notifications
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterDeviceRequest" }
+      responses:
+        "204": { description: Registered }
+
+  /webhooks/square:
+    post:
+      tags: [Webhooks]
+      summary: >
+        Square webhook receiver (backend-internal). Verifies the
+        x-square-hmacsha256-signature header before trusting the body and
+        de-dupes on event_id. Not called by the mobile app.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SquareWebhookEvent" }
+      responses:
+        "200": { description: Accepted (or ignored duplicate) }
+        "401":
+          description: Signature verification failed
+
+  /admin/overrides:
+    get:
+      tags: [Admin]
+      summary: >
+        Read the merchant control-panel menu overrides (required/min/max,
+        conditional groups, hide/sold-out, prep time). Square stays the source
+        of truth; these are layered on top of the live menu by the backend.
+      description: >
+        Requires an ADMIN bearer token (typ "admin") from POST /admin/login when
+        ADMIN_PASSWORD is set. If ADMIN_PASSWORD is unset, falls back to an open
+        dev/sandbox gate (and is disabled — 403 — in production). Not a
+        customer-JWT route.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuOverrides" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+    put:
+      tags: [Admin]
+      summary: Replace the stored menu overrides document
+      description: >
+        Requires an ADMIN bearer token (see GET /admin/overrides). Persisted in
+        the KV-backed overrides store.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PutOverridesRequest" }
+      responses:
+        "200":
+          description: Saved
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MenuOverrides" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /admin/login:
+    post:
+      tags: [Admin]
+      summary: Exchange the admin password for a short-lived admin JWT
+      description: >
+        Control-panel sign-in. Returns an 8h admin bearer token used by the
+        /admin/overrides endpoints. Backed by the ADMIN_PASSWORD secret.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expiresIn: { type: integer }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+
+  /orders/{orderId}/advance:
+    post:
+      tags: [Orders]
+      summary: "DEV/SANDBOX ONLY: advance an order's status one step"
+      description: >
+        Simulates the kitchen advancing an order (RECEIVED→MAKING→READY→
+        COMPLETED) so the status flow is testable without Square's POS. Returns
+        403 outside sandbox/mock mode. Customer-JWT route, owner-scoped.
+      parameters:
+        - in: path
+          name: orderId
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-generated UUID; forwarded to Square so retries are safe.
+      schema: { type: string }
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiError" }
+
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Minor units (cents). }
+        currency: { type: string, enum: [USD] }
+
+    ApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                [
+                  UNAUTHENTICATED,
+                  FORBIDDEN,
+                  NOT_FOUND,
+                  VALIDATION_FAILED,
+                  CONFLICT,
+                  ITEM_UNAVAILABLE,
+                  PAYMENT_DECLINED,
+                  RATE_LIMITED,
+                  SQUARE_ERROR,
+                  INTERNAL,
+                ]
+            message: { type: string }
+            details: {}
+
+    Paginated:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {}
+        cursor: { type: string }
+
+    Health:
+      type: object
+      required: [status, squareEnvironment, apiVersion, time]
+      properties:
+        status: { type: string, enum: [ok] }
+        squareEnvironment: { type: string, enum: [sandbox, production] }
+        apiVersion: { type: string, example: "2026-01-22" }
+        time: { type: string, format: date-time }
+
+    Menu:
+      type: object
+      required: [categories, version, fetchedAt]
+      properties:
+        version: { type: string }
+        fetchedAt: { type: string, format: date-time }
+        categories:
+          type: array
+          items: { $ref: "#/components/schemas/MenuCategory" }
+
+    MenuCategory:
+      type: object
+      required: [id, name, ordinal, items]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        ordinal: { type: integer }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/MenuItem" }
+
+    MenuItem:
+      type: object
+      required: [id, name, variations, modifierGroups, available]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        description: { type: string }
+        imageUrl: { type: string, format: uri }
+        available: { type: boolean }
+        variations:
+          type: array
+          items: { $ref: "#/components/schemas/MenuVariation" }
+        modifierGroups:
+          type: array
+          items: { $ref: "#/components/schemas/ModifierGroup" }
+
+    MenuVariation:
+      type: object
+      required: [id, name, price, available]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        price: { $ref: "#/components/schemas/Money" }
+        available: { type: boolean }
+
+    ModifierGroup:
+      type: object
+      required: [id, name, minSelections, maxSelections, modifiers]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        minSelections: { type: integer }
+        maxSelections: { type: integer }
+        modifiers:
+          type: array
+          items: { $ref: "#/components/schemas/Modifier" }
+        conditional:
+          allOf: [{ $ref: "#/components/schemas/ConditionalRule" }]
+          description: >
+            Optional, additive. Set by the merchant control panel's override
+            layer. When present the group is hidden until a trigger selection is
+            made (data-driven combo→drink reveal). Absent on most groups; the app
+            falls back to its regex heuristic only when NO group carries this.
+
+    Modifier:
+      type: object
+      required: [id, name, price, available]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        price: { $ref: "#/components/schemas/Money" }
+        available: { type: boolean }
+        selectedByDefault: { type: boolean }
+
+    CartLineItem:
+      type: object
+      required: [itemId, variationId, quantity, modifierIds]
+      properties:
+        itemId: { type: string }
+        variationId: { type: string }
+        quantity: { type: integer, minimum: 1 }
+        modifierIds:
+          type: array
+          items: { type: string }
+        note: { type: string }
+
+    OrderLineItem:
+      type: object
+      required: [name, variationName, quantity, modifiers, total]
+      properties:
+        name: { type: string }
+        variationName: { type: string }
+        quantity: { type: integer }
+        note: { type: string }
+        total: { $ref: "#/components/schemas/Money" }
+        modifiers:
+          type: array
+          items:
+            type: object
+            required: [name, price]
+            properties:
+              name: { type: string }
+              price: { $ref: "#/components/schemas/Money" }
+
+    Order:
+      type: object
+      required:
+        [
+          id,
+          squareOrderId,
+          displayNumber,
+          status,
+          lineItems,
+          subtotal,
+          tax,
+          discount,
+          total,
+          pickup,
+          createdAt,
+          updatedAt,
+        ]
+      properties:
+        id: { type: string }
+        squareOrderId: { type: string }
+        displayNumber: { type: string }
+        status:
+          type: string
+          enum: [DRAFT, RECEIVED, MAKING, READY, COMPLETED, CANCELED]
+        lineItems:
+          type: array
+          items: { $ref: "#/components/schemas/OrderLineItem" }
+        subtotal: { $ref: "#/components/schemas/Money" }
+        tax: { $ref: "#/components/schemas/Money" }
+        discount: { $ref: "#/components/schemas/Money" }
+        total: { $ref: "#/components/schemas/Money" }
+        starsEarned: { type: integer }
+        pickup:
+          type: object
+          properties:
+            readyEta: { type: string, format: date-time }
+            note: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CreateOrderRequest:
+      type: object
+      required: [lineItems]
+      properties:
+        lineItems:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/CartLineItem" }
+        dealId: { type: string }
+        redeemStars: { type: integer, minimum: 0 }
+        pickupNote: { type: string }
+
+    CreateOrderResponse:
+      type: object
+      required: [order, amountDue]
+      properties:
+        order: { $ref: "#/components/schemas/Order" }
+        amountDue: { $ref: "#/components/schemas/Money" }
+
+    CreatePaymentRequest:
+      type: object
+      required: [orderId, sourceId]
+      properties:
+        orderId: { type: string }
+        sourceId:
+          type: string
+          description: Opaque payment token from the In-App Payments SDK.
+        verificationToken: { type: string }
+
+    CreatePaymentResponse:
+      type: object
+      required: [order, paymentId]
+      properties:
+        order: { $ref: "#/components/schemas/Order" }
+        paymentId: { type: string }
+        receiptUrl: { type: string, format: uri }
+
+    AuthTokens:
+      type: object
+      required: [accessToken, refreshToken, expiresIn]
+      properties:
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        expiresIn: { type: integer }
+
+    AuthResponse:
+      allOf:
+        - $ref: "#/components/schemas/AuthTokens"
+        - type: object
+          required: [customer]
+          properties:
+            customer: { $ref: "#/components/schemas/Customer" }
+
+    RegisterRequest:
+      type: object
+      required: [email, password, firstName]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+
+    AppleAuthRequest:
+      type: object
+      required: [identityToken, authorizationCode]
+      properties:
+        identityToken: { type: string }
+        authorizationCode: { type: string }
+        firstName: { type: string }
+        lastName: { type: string }
+
+    RefreshRequest:
+      type: object
+      required: [refreshToken]
+      properties:
+        refreshToken: { type: string }
+
+    Customer:
+      type: object
+      required: [id, squareCustomerId, email, firstName, createdAt]
+      properties:
+        id: { type: string }
+        squareCustomerId: { type: string }
+        email: { type: string, format: email }
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    UpdateProfileRequest:
+      type: object
+      description: >
+        Partial profile update for PATCH /me. All fields optional; only supplied
+        fields change. Phone lets Apple Sign-In users add one for Square Loyalty.
+      properties:
+        firstName: { type: string }
+        lastName: { type: string }
+        phone: { type: string, description: "E.164, used to map into Square Loyalty" }
+
+    Loyalty:
+      type: object
+      required: [stars, earnRule, rewards]
+      properties:
+        stars: { type: integer }
+        earnRule: { type: string, example: "1 Star per $1" }
+        rewards:
+          type: array
+          items: { $ref: "#/components/schemas/LoyaltyReward" }
+
+    LoyaltyReward:
+      type: object
+      required: [id, name, cost, value]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        cost: { type: integer }
+        value: { $ref: "#/components/schemas/Money" }
+
+    Deal:
+      type: object
+      required: [id, title, description, startsAt, endsAt, appExclusive]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        imageUrl: { type: string, format: uri }
+        code: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        appExclusive: { type: boolean }
+
+    Favorite:
+      type: object
+      required: [id, name, lineItems, createdAt]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        createdAt: { type: string, format: date-time }
+        lineItems:
+          type: array
+          items: { $ref: "#/components/schemas/CartLineItem" }
+
+    CreateFavoriteRequest:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        fromOrderId: { type: string }
+        lineItems:
+          type: array
+          items: { $ref: "#/components/schemas/CartLineItem" }
+
+    RegisterDeviceRequest:
+      type: object
+      required: [expoPushToken, platform]
+      properties:
+        expoPushToken: { type: string }
+        platform: { type: string, enum: [ios, android] }
+        staff:
+          type: boolean
+          default: false
+          description: >-
+            When true, register this device as the staff/store tablet (receives
+            new-order alerts) instead of a customer device (receives order-status
+            pushes). Additive; defaults to false.
+
+    SquareWebhookEvent:
+      type: object
+      required: [event_id, type, merchant_id, created_at, data]
+      properties:
+        event_id: { type: string }
+        type: { type: string }
+        merchant_id: { type: string }
+        created_at: { type: string, format: date-time }
+        data:
+          type: object
+          required: [type, id, object]
+          properties:
+            type: { type: string }
+            id: { type: string }
+            object: {}
+
+    # --- Merchant control panel (Orda-style admin layer) ---
+    ConditionalRule:
+      type: object
+      description: >
+        Reveal a modifier group only once a trigger modifier in another group is
+        selected (data-driven version of the app's combo→drink heuristic).
+      required: [hiddenUntilTriggered]
+      properties:
+        hiddenUntilTriggered: { type: boolean, enum: [true] }
+        triggerGroupIds:
+          type: array
+          items: { type: string }
+          description: Square MODIFIER_LIST ids whose selection can trigger this group.
+        triggerModifierIds:
+          type: array
+          items: { type: string }
+          description: Square MODIFIER ids that, when selected, reveal this group.
+
+    GroupOverride:
+      type: object
+      description: Per modifier-GROUP override. Square remains the source of the modifiers.
+      required: [groupId]
+      properties:
+        groupId: { type: string, description: Square MODIFIER_LIST id. }
+        required: { type: boolean }
+        minSelections: { type: integer }
+        maxSelections: { type: integer }
+        conditional: { $ref: "#/components/schemas/ConditionalRule" }
+
+    ItemOverride:
+      type: object
+      description: Per-ITEM override. Square remains the source of the item + price.
+      required: [itemId]
+      properties:
+        itemId: { type: string, description: Square ITEM id. }
+        hidden: { type: boolean }
+        soldOut: { type: boolean }
+        prepTimeMinutes: { type: integer, description: Feeds Square order pickup_at later. }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/GroupOverride" }
+
+    DealDiscount:
+      type: object
+      description: >
+        What an app-side deal does at checkout. Deals are a promo layer, NOT a
+        Square catalog concept. Square still computes authoritative totals in
+        LIVE mode; this drives the mock-mode discount + tells the app the effect.
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [freeItem, amountOff, doubleStars] }
+        amountCents:
+          type: integer
+          description: Fixed amount knocked off (cents). Required for freeItem / amountOff.
+        minSubtotalCents:
+          type: integer
+          description: Minimum cart subtotal (cents) before the discount applies.
+
+    DealOverride:
+      type: object
+      description: >
+        A fully merchant-editable deal, stored in the overrides layer and mapped
+        to the app-facing Deal by the backend. The owner creates/edits/toggles
+        deals from the control panel — no code changes.
+      required: [dealId, title, description]
+      properties:
+        dealId: { type: string }
+        title: { type: string }
+        description: { type: string }
+        code: { type: string }
+        imageUrl: { type: string, format: uri }
+        enabled: { type: boolean, default: true }
+        appExclusive: { type: boolean, default: true }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        discount: { $ref: "#/components/schemas/DealDiscount" }
+
+    MenuOverrides:
+      type: object
+      required: [items, deals, updatedAt]
+      properties:
+        items:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/ItemOverride" }
+          description: Map of Square ITEM id → item override.
+        deals:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/DealOverride" }
+        updatedAt: { type: string, format: date-time }
+
+    PutOverridesRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/ItemOverride" }
+        deals:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/DealOverride" }

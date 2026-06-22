@@ -1,0 +1,8 @@
+{
+  "name": "@sf/contract",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Source-of-truth API contract types shared by the app and backend.",
+  "main": "types.ts",
+  "types": "types.ts"
+}

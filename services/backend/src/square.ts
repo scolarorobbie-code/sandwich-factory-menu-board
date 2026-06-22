@@ -1,0 +1,378 @@
+import type { Menu, MenuCategory, MenuItem, Modifier, ModifierGroup, Money } from "@sf/contract";
+import type { Env } from "./env";
+
+const SQUARE_HOSTS = {
+  sandbox: "https://connect.squareupsandbox.com",
+  production: "https://connect.squareup.com",
+};
+
+/** Thin Square Connect API client. Lives ONLY on the backend (hard rule #1). */
+export function squareFetch(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
+  const base = SQUARE_HOSTS[env.SQUARE_ENVIRONMENT];
+  return fetch(`${base}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${env.SQUARE_ACCESS_TOKEN}`,
+      "Square-Version": env.SQUARE_API_VERSION,
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+}
+
+const usd = (cents: number | bigint | undefined): Money => ({
+  amount: Number(cents ?? 0),
+  currency: "USD",
+});
+
+/**
+ * Fetch the live menu from Square Catalog and map it into our contract `Menu`,
+ * exactly like Orda does: items, variations, prices, modifier groups, PHOTOS,
+ * and live "sold out" availability from Square Inventory.
+ */
+export async function fetchLiveMenu(env: Env): Promise<Menu> {
+  // Square paginates /v2/catalog/search. With a full menu (200+ objects) the
+  // result spans several pages — we MUST follow the cursor or we silently drop
+  // everything past page 1 (which once hid combo drink lists from the app).
+  const objects: SquareObject[] = [];
+  const relatedObjects: SquareObject[] = [];
+  let cursor: string | undefined;
+  do {
+    const res = await squareFetch(env, "/v2/catalog/search", {
+      method: "POST",
+      body: JSON.stringify({
+        object_types: ["ITEM", "CATEGORY", "MODIFIER_LIST", "IMAGE"],
+        include_related_objects: true,
+        ...(cursor ? { cursor } : {}),
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`Square catalog error ${res.status}: ${await res.text()}`);
+    }
+    const page = (await res.json()) as SquareCatalogResponse;
+    objects.push(...(page.objects ?? []));
+    relatedObjects.push(...(page.related_objects ?? []));
+    cursor = page.cursor;
+  } while (cursor);
+
+  const all = [...objects, ...relatedObjects];
+
+  // Lookup maps from related objects.
+  const imageUrls = new Map<string, string>();
+  const modifierLists = new Map<string, SquareObject>();
+  const categories = new Map<string, MenuCategory>();
+  for (const o of all) {
+    if (o.type === "IMAGE" && o.image_data?.url) imageUrls.set(o.id, o.image_data.url);
+    if (o.type === "MODIFIER_LIST") modifierLists.set(o.id, o);
+    if (o.type === "CATEGORY" && o.category_data) {
+      categories.set(o.id, { id: o.id, name: o.category_data.name, ordinal: categories.size, items: [] });
+    }
+  }
+
+  const uncategorized: MenuCategory = { id: "uncategorized", name: "Menu", ordinal: 999, items: [] };
+  const variationIds: string[] = [];
+
+  for (const o of objects) {
+    if (o.type !== "ITEM" || !o.item_data) continue;
+    const item = mapItem(o, imageUrls, modifierLists);
+    item.variations.forEach((v) => variationIds.push(v.id));
+    const catId = o.item_data.category_id ?? o.item_data.categories?.[0]?.id;
+    const cat = (catId && categories.get(catId)) || uncategorized;
+    cat.items.push(item);
+  }
+
+  const result = [...categories.values(), uncategorized].filter((c) => c.items.length > 0);
+
+  // Live stock: mark sold-out variations/items from Square Inventory.
+  await applyInventory(env, variationIds, result);
+
+  return {
+    version: String(Date.now()),
+    fetchedAt: new Date().toISOString(),
+    categories: result.sort((a, b) => a.ordinal - b.ordinal),
+  };
+}
+
+/**
+ * Food-relevant placeholder image for items that don't have a Square photo yet.
+ * Picks a keyword from the item name so the stand-in is on-theme, with a stable
+ * per-item variation. Real Square photos always take precedence.
+ */
+export function placeholderImage(name: string, seed: string): string {
+  const n = name.toLowerCase();
+  const kw = /burger/.test(n)
+    ? "burger"
+    : /shake|smoothie|malt/.test(n)
+      ? "milkshake"
+      : /cookie|brownie|dessert|cake/.test(n)
+        ? "cookie"
+        : /drink|soda|lemonade|tea|coffee|cola|juice/.test(n)
+          ? "soda"
+          : /fries|tots|chip/.test(n)
+            ? "fries"
+            : /salad/.test(n)
+              ? "salad"
+              : /wrap/.test(n)
+                ? "wrap"
+                : /cuban/.test(n)
+                  ? "cuban,sandwich"
+                  : "sandwich";
+  let h = 7;
+  for (const c of seed) h = (h * 31 + c.charCodeAt(0)) | 0;
+  return `https://loremflickr.com/600/400/${kw},food?lock=${Math.abs(h) % 1000}`;
+}
+
+function mapItem(
+  o: SquareObject,
+  imageUrls: Map<string, string>,
+  modifierLists: Map<string, SquareObject>,
+): MenuItem {
+  const d = o.item_data!;
+  const imageId = d.image_ids?.[0];
+  const squareImage = imageId ? imageUrls.get(imageId) : undefined;
+  return {
+    id: o.id,
+    name: d.name ?? "Item",
+    description: d.description,
+    imageUrl: squareImage ?? placeholderImage(d.name ?? "food", o.id),
+    available: !o.is_deleted,
+    variations: (d.variations ?? []).map((v) => ({
+      id: v.id,
+      name: v.item_variation_data?.name ?? "Regular",
+      price: usd(v.item_variation_data?.price_money?.amount),
+      available: !v.is_deleted,
+    })),
+    modifierGroups: mapModifierGroups(d.modifier_list_info ?? [], modifierLists),
+  };
+}
+
+/** Many merchants prefix modifier-group names with "1.", "2." to force order. */
+export function leadingNumber(name: string): number {
+  const m = name.match(/^\s*(\d+)/);
+  return m ? parseInt(m[1], 10) : Number.MAX_SAFE_INTEGER;
+}
+/** Strip a leading "3. " / "3) " / "3 - " so customers see a clean name. */
+export function cleanName(name: string): string {
+  return name.replace(/^\s*\d+\s*[.)\-:]\s*/, "").trim() || name;
+}
+
+export function mapModifierGroups(
+  info: SquareModifierListInfo[],
+  modifierLists: Map<string, SquareObject>,
+): ModifierGroup[] {
+  const built: { group: ModifierGroup; sort: number; ordinal: number }[] = [];
+  for (const ref of info) {
+    if (ref.enabled === false) continue;
+    const list = modifierLists.get(ref.modifier_list_id);
+    const ld = list?.modifier_list_data;
+    if (!ld) continue;
+    const single = ld.selection_type === "SINGLE";
+    const rawName = ld.name ?? "Options";
+    const modifiers: Modifier[] = [...(ld.modifiers ?? [])]
+      .sort((a, b) => (a.modifier_data?.ordinal ?? 0) - (b.modifier_data?.ordinal ?? 0))
+      .map((m) => ({
+        id: m.id,
+        name: m.modifier_data?.name ?? "Option",
+        price: usd(m.modifier_data?.price_money?.amount),
+        available: !m.is_deleted,
+        selectedByDefault: m.modifier_data?.on_by_default,
+      }));
+    built.push({
+      group: {
+        id: ref.modifier_list_id,
+        name: cleanName(rawName),
+        minSelections: ref.min_selected_modifiers ?? 0,
+        maxSelections: ref.max_selected_modifiers ?? (single ? 1 : modifiers.length),
+        modifiers,
+      },
+      sort: leadingNumber(rawName),
+      ordinal: ref.ordinal ?? 0,
+    });
+  }
+  // Order groups by the number in their name (1, 2, 3…), then Square's ordinal.
+  built.sort((a, b) => a.sort - b.sort || a.ordinal - b.ordinal);
+  return built.map((b) => b.group);
+}
+
+/** Mark variations sold out when Square Inventory reports zero on-hand. */
+async function applyInventory(env: Env, variationIds: string[], categories: MenuCategory[]): Promise<void> {
+  if (variationIds.length === 0) return;
+  try {
+    const res = await squareFetch(env, "/v2/inventory/counts/batch-retrieve", {
+      method: "POST",
+      body: JSON.stringify({ catalog_object_ids: variationIds, location_ids: [env.SQUARE_LOCATION_ID] }),
+    });
+    if (!res.ok) return; // inventory not critical; fail open (treat as available)
+    const data = (await res.json()) as { counts?: { catalog_object_id: string; state: string; quantity: string }[] };
+    const soldOut = new Set<string>();
+    for (const c of data.counts ?? []) {
+      if (c.state === "IN_STOCK" && Number(c.quantity) <= 0) soldOut.add(c.catalog_object_id);
+    }
+    if (soldOut.size === 0) return;
+    for (const cat of categories) {
+      for (const item of cat.items) {
+        for (const v of item.variations) if (soldOut.has(v.id)) v.available = false;
+        if (item.variations.length > 0 && item.variations.every((v) => !v.available)) item.available = false;
+      }
+    }
+  } catch {
+    // Network/inventory issues should never break the menu — fail open.
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Orders: push a real PICKUP order into Square (lands in POS, prints).
+// ---------------------------------------------------------------------------
+
+export interface SquareLineItem {
+  catalogObjectId: string; // the variation id
+  quantity: number;
+  modifierIds: string[];
+  note?: string;
+}
+
+export interface SquareOrderResult {
+  squareOrderId: string;
+  subtotal: Money;
+  tax: Money;
+  discount: Money;
+  total: Money;
+}
+
+/**
+ * Create an order in Square via the Orders API. Square computes tax/pricing
+ * authoritatively from the catalog + location settings. The order is created
+ * as PICKUP so it appears correctly in the existing Square POS.
+ *
+ * `pickupAt` (ISO 8601, RFC 3339) feeds the control-panel prep-time → ready-time
+ * estimate: when present we send a SCHEDULED pickup with `pickup_at = now + prep`
+ * (Square requires `pickup_at` and forbids `schedule_type: ASAP` together). When
+ * absent we fall back to ASAP.
+ */
+export async function createSquareOrder(
+  env: Env,
+  lineItems: SquareLineItem[],
+  idempotencyKey: string,
+  customerName: string,
+  pickupNote?: string,
+  pickupAt?: string,
+  discount?: { name: string; amountCents: number },
+): Promise<SquareOrderResult> {
+  const pickupDetails: Record<string, unknown> = {
+    recipient: { display_name: customerName },
+    note: pickupNote,
+    ...(pickupAt ? { pickup_at: pickupAt } : { schedule_type: "ASAP" }),
+  };
+  // App-exclusive deal → ad-hoc ORDER-scope discount so Square reduces the real
+  // charge and recomputes tax/total authoritatively.
+  const discounts =
+    discount && discount.amountCents > 0
+      ? [{ name: discount.name, amount_money: { amount: discount.amountCents, currency: "USD" }, scope: "ORDER" }]
+      : undefined;
+  const res = await squareFetch(env, "/v2/orders", {
+    method: "POST",
+    body: JSON.stringify({
+      idempotency_key: idempotencyKey,
+      order: {
+        location_id: env.SQUARE_LOCATION_ID,
+        line_items: lineItems.map((l) => ({
+          quantity: String(l.quantity),
+          catalog_object_id: l.catalogObjectId,
+          modifiers: l.modifierIds.map((id) => ({ catalog_object_id: id })),
+          note: l.note,
+        })),
+        ...(discounts ? { discounts } : {}),
+        fulfillments: [
+          {
+            type: "PICKUP",
+            state: "PROPOSED",
+            pickup_details: pickupDetails,
+          },
+        ],
+      },
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Square order error ${res.status}: ${await res.text()}`);
+  }
+  const { order } = (await res.json()) as {
+    order?: {
+      id: string;
+      total_money?: { amount?: number };
+      total_tax_money?: { amount?: number };
+      total_discount_money?: { amount?: number };
+      net_amounts?: { total_money?: { amount?: number } };
+    };
+  };
+  return toOrderResult(order);
+}
+
+/**
+ * Re-read an order's authoritative totals from Square. Used after a loyalty
+ * reward is attached so our Order reflects Square's recomputed discount/total.
+ */
+export async function retrieveSquareOrder(env: Env, squareOrderId: string): Promise<SquareOrderResult> {
+  const res = await squareFetch(env, `/v2/orders/${squareOrderId}`, { method: "GET" });
+  if (!res.ok) {
+    throw new Error(`Square order retrieve error ${res.status}: ${await res.text()}`);
+  }
+  const { order } = (await res.json()) as { order?: SquareOrderMoney };
+  return toOrderResult(order);
+}
+
+interface SquareOrderMoney {
+  id?: string;
+  total_money?: { amount?: number };
+  total_tax_money?: { amount?: number };
+  total_discount_money?: { amount?: number };
+}
+
+function toOrderResult(order: SquareOrderMoney | undefined): SquareOrderResult {
+  const tax = order?.total_tax_money?.amount ?? 0;
+  const discount = order?.total_discount_money?.amount ?? 0;
+  const total = order?.total_money?.amount ?? 0;
+  return {
+    squareOrderId: order?.id ?? "",
+    subtotal: usd(total - tax + discount),
+    tax: usd(tax),
+    discount: usd(discount),
+    total: usd(total),
+  };
+}
+
+// --- Minimal Square response shapes (only the fields we read) ---
+interface SquareCatalogResponse {
+  objects?: SquareObject[];
+  related_objects?: SquareObject[];
+  cursor?: string;
+}
+export interface SquareObject {
+  id: string;
+  type: string;
+  is_deleted?: boolean;
+  category_data?: { name: string };
+  image_data?: { url?: string };
+  modifier_list_data?: {
+    name?: string;
+    selection_type?: string;
+    modifiers?: SquareObject[];
+  };
+  modifier_data?: { name?: string; price_money?: { amount?: number }; on_by_default?: boolean; ordinal?: number };
+  item_data?: {
+    name?: string;
+    description?: string;
+    category_id?: string;
+    categories?: { id: string }[];
+    image_ids?: string[];
+    variations?: SquareObject[];
+    modifier_list_info?: SquareModifierListInfo[];
+  };
+  item_variation_data?: { name?: string; price_money?: { amount?: number } };
+}
+export interface SquareModifierListInfo {
+  modifier_list_id: string;
+  enabled?: boolean;
+  min_selected_modifiers?: number;
+  max_selected_modifiers?: number;
+  ordinal?: number;
+}

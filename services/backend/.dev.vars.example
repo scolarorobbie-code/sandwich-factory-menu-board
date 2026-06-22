@@ -1,0 +1,14 @@
+# Copy to `.dev.vars` for local `wrangler dev`. NEVER commit the real file.
+# Leave SQUARE_ACCESS_TOKEN blank to run entirely on mock data.
+
+# From developer.squareup.com -> your app -> Sandbox:
+SQUARE_ACCESS_TOKEN=
+SQUARE_WEBHOOK_SIGNATURE_KEY=
+
+# Used to sign customer login tokens. Any long random string for local dev.
+JWT_SIGNING_SECRET=dev-only-change-me
+
+# Password for the merchant control panel (GET /admin). Leave blank locally to
+# keep the panel open with no password in sandbox/dev. Set a strong value in
+# production via `wrangler secret put ADMIN_PASSWORD` (NEVER commit the real one).
+ADMIN_PASSWORD=
