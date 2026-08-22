@@ -1,0 +1,21 @@
+# Fly.io config for the wisteria app server (server/).
+# Deploy with: fly deploy
+# Secrets (fly secrets set ...): DATABASE_URL, JWT_SECRET, WORKER_SHARED_SECRET
+app = "wisteria-server"
+primary_region = "iad"
+
+[build]
+  dockerfile = "server/Dockerfile"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[checks.health]
+  type = "http"
+  path = "/health"
+  interval = "15s"
+  timeout = "5s"

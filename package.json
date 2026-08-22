@@ -1,0 +1,19 @@
+{
+  "name": "wisteria",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Subscription AI companion web app (working name: wisteria)",
+  "workspaces": [
+    "server",
+    "web",
+    "worker"
+  ],
+  "scripts": {
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

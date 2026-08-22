@@ -1,0 +1,8 @@
+# Cloudflare Worker: the ONLY place provider API keys live.
+# Set secrets with: wrangler secret put <NAME>
+# Required secrets (see /.env.example for the full list):
+#   LLM_PROVIDER_API_KEY
+#   WORKER_SHARED_SECRET   (app server authenticates to this worker with it)
+name = "wisteria-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-10-01"
